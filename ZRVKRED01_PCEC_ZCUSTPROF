@@ -1,0 +1,824 @@
+
+************************************************************************
+* Changed By  :  Nimisha Deshpande
+* Changed On  :  07/18/2007          Change Id: ND001
+* Ticket      :  PM106325
+* Description :  change the logic to enter the orders of the order type
+*                mentioned on the selection screen.
+
+************************************************************************
+**--------------------------CHANGE HISTORY----------------------------**
+* CHANGE #    : CHG002                                                 *
+* DATE        : 04/25/2007                                             *
+* AUTHOR      : Reecha Kayal, IBM India Pvt. Ltd.                      *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ERP 6.2                                                *
+* SAP Request#: D11K908413                                             *
+* DESCRIPTION : Changed the include for the addition of a button       *
+*               for Customer Overview                                  *
+*______________________________________________________________________*
+**--------------------------CHANGE HISTORY----------------------------**
+* CHANGE #    : CHG003                                                 *
+* DATE        : 07/09/2007                                             *
+* AUTHOR      : Reecha Kayal, IBM India Pvt. Ltd.                      *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ERP 6.2                                                *
+* SAP Request#: D11K911614                                             *
+* DESCRIPTION : Changes done as per the SCR, populating the values     *
+*               for fields Credit Account, Risk category and           *
+*               Open Credit Limit.                                     *
+*______________________________________________________________________*
+**--------------------------CHANGE HISTORY----------------------------**
+* CHANGE #    : CHG004                                                 *
+* DATE        : 07/16/2007                                             *
+* AUTHOR      : Reecha Kayal, IBM India Pvt. Ltd.                      *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ERP 6.2                                                *
+* SAP Request#: D11K912199                                             *
+* DESCRIPTION : Changes done as per the SCR, populating the values     *
+*               for fields Credit Limit, Net Value (NETWR), Payment    *
+*               terms (ZTERM), Order Number (AUFNR) and PO (BSTNK)     *
+*______________________________________________________________________*
+* CHANGE #    : YG09157                                               *
+* DATE        : 07/31/2008                                             *
+* AUTHOR      : Yuan Gu, ibm usa                                       *
+* DESCRIPTION : Get the "Order" and "Delivery" values including tax.   *
+*______________________________________________________________________*
+* CHANGE #    : YG09157   2008.08.20                                   *
+* DESCRIPTION : 1) Exclude rejected order item from "Delivery" values  *
+*               2) Include VBTYP(T) delivery returns                   *
+*______________________________________________________________________*
+* CHANGE #    : SP08188  2008.09.08    SP001                           *
+* DESCRIPTION : Change for calculation of delivery amount.             *
+*______________________________________________________________________*
+* CHANGE #    : SP08188  2008.12.17    SP001                           *
+* DESCRIPTION : Change for Credit Group                                *
+*______________________________________________________________________*
+
+INCLUDE rvkredto.
+
+Tables : VBRK.
+DATA  okcode_ef15.
+
+PARAMETERS: callmode(1) TYPE c NO-DISPLAY.
+
+* Begin of CHG003+
+TYPES: BEGIN OF gx_knkli,
+       vbeln TYPE vbeln,
+       netwr TYPE netwr_ak,
+       knkli TYPE knkli,
+       END OF gx_knkli.
+
+TYPES: BEGIN OF gx_likp,
+       vbeln TYPE vbeln,
+       knkli TYPE knkli,
+       ternr TYPE aufnr,
+       xblnr TYPE xblnr_likp,
+       END OF gx_likp.
+
+TYPES: BEGIN OF gx_ukm_cms,
+       partner    TYPE bu_partner,     "Business Partner Number
+       risk_class TYPE ukm_risk_class, "Risk Class
+       END OF gx_ukm_cms.
+
+* Credit Account (UKMBP_CMS_SGM) table.
+TYPES: BEGIN OF gx_ukm_sgm,
+       partner      TYPE bu_partner,       "Business Partner Number
+       credit_sgmnt TYPE ukm_credit_sgmnt, "Credit Segment
+       credit_limit TYPE ukm_credit_limit, "Credit Limit
+       END OF gx_ukm_sgm.
+
+TYPES: BEGIN OF gx_but050,
+    relnr TYPE bu_relnr,       "BP Relationship Number
+    partner1 TYPE bu_partner,  "Business Partner Number
+    partner2 TYPE bu_partner,  "Business Partner Number
+    date_to  TYPE bu_datto,    "Validity Date (Valid To)
+    END OF gx_but050.
+
+* Begin of CHG004+
+TYPES: BEGIN OF gx_lips,
+       vbeln TYPE vbeln_vl,
+       posnr TYPE posnr_vl,
+       vgbel TYPE vgbel,
+       netwr TYPE netwr,
+       END OF gx_lips.
+
+TYPES: BEGIN OF gx_pordr,
+       vbeln TYPE vbeln_va,
+       bstnk TYPE bstnk,
+       aufnr TYPE aufnr,
+       END OF gx_pordr.
+
+TYPES: BEGIN OF gx_vbkd,
+       vbeln TYPE vbeln,
+       posnr TYPE posnr,
+       zterm TYPE dzterm,
+       END OF gx_vbkd.
+
+TYPES: BEGIN OF gx_vbap,
+         vbeln TYPE vbeln_va,
+         posnr TYPE posnr_va,
+         netwr TYPE netwr_ap,
+         kwmeng TYPE kwmeng,     "YG09157 2008.08.28
+         mwsbp TYPE mwsbp,       "YG09157 2008.07.30
+       END OF gx_vbap.
+
+TYPES: BEGIN OF gx_vbfa,
+         vbelv   TYPE vbeln_von,
+         posnv   TYPE posnr_von,
+         vbtyp_n TYPE vbtyp_n,
+         vbeln   TYPE vbeln_vl,    "YG09157 2008.07.30  delivery doc
+         rfmng   TYPE rfmng,       "YG09157 2008.08.28  delivery qyt
+       END OF gx_vbfa.
+
+TYPES: BEGIN OF gx_netval,
+       vbeln TYPE vbeln_va,
+       value TYPE kzwi3,
+       END OF gx_netval.
+* End of CHG004+
+
+DATA: gt_knkli TYPE STANDARD TABLE OF gx_knkli INITIAL SIZE 0,
+      gt_likp  TYPE STANDARD TABLE OF gx_likp INITIAL SIZE 0,
+      gt_ukm_cms TYPE STANDARD TABLE OF gx_ukm_cms INITIAL SIZE 0,
+      gt_ukm_sgm TYPE STANDARD TABLE OF gx_ukm_sgm INITIAL SIZE 0,
+      gt_risktxt TYPE STANDARD TABLE OF ukm_risk_cl0t INITIAL SIZE 0,
+      gt_but050  TYPE STANDARD TABLE OF gx_but050 INITIAL SIZE 0,
+* Begin of CHG004+
+      gt_likptmp TYPE STANDARD TABLE OF gx_likp INITIAL SIZE 0,
+      gt_lips    TYPE STANDARD TABLE OF gx_lips INITIAL SIZE 0,
+      gt_netsum  TYPE STANDARD TABLE OF gx_lips INITIAL SIZE 0,
+      gt_pordr   TYPE STANDARD TABLE OF gx_pordr INITIAL SIZE 0,
+      gt_vbkd    TYPE STANDARD TABLE OF gx_vbkd  INITIAL SIZE 0,
+      gt_odrval  TYPE STANDARD TABLE OF gx_knkli INITIAL SIZE 0,
+      gt_vbap    TYPE STANDARD TABLE OF gx_vbap  INITIAL SIZE 0,
+      gt_vbfa    TYPE STANDARD TABLE OF gx_vbfa  INITIAL SIZE 0,
+      gt_netval  TYPE STANDARD TABLE OF gx_netval INITIAL SIZE 0.
+* End of CHG004+
+DATA: wa_but050  TYPE gx_but050,
+      wa_ukm_cms TYPE gx_ukm_cms,
+      wa_ukm_sgm TYPE gx_ukm_sgm,
+      wa_risktxt TYPE ukm_risk_cl0t,
+      wa_knkli   TYPE gx_knkli,
+      wa_lips    TYPE gx_lips,                              "CHG004+
+      wa_netsum  TYPE gx_lips,                              "CHG004+
+      wa_pordr   TYPE gx_pordr,                             "CHG004+
+      wa_vbkd    TYPE gx_vbkd,                              "CHG004+
+      wa_odrval  TYPE gx_knkli,                             "CHG004+
+      wa_vbap    TYPE gx_vbap,                              "CHG004+
+      wa_vbfa    TYPE gx_vbfa,                              "CHG004+
+      wa_netval  TYPE gx_netval,                            "CHG004+
+      wa_likp    TYPE gx_likp.
+
+* Begin of CHG004+
+DATA: gt_vbrng TYPE RANGE OF vbeln_va,
+      wa_vbrng LIKE LINE OF gt_vbrng.
+
+* End of CHG004+
+
+DATA: gt_ukm_totals TYPE STANDARD TABLE OF ukm_totals INITIAL SIZE 0,
+      wa_ukm_totals TYPE ukm_totals.
+
+DATA: g_totexp  TYPE ukm_comm_actual,
+      g_netval  TYPE kzwi3.                                 "CHG004+
+
+CONSTANTS: gc_ukm001    TYPE bu_reltyp VALUE 'UKM001',
+           gc_vbtyp_j   TYPE vbtyp_n   VALUE 'J',           "YG09157
+           gc_vbtyp_t   TYPE vbtyp_n   VALUE 'T'.           "YG09157
+
+* End of CHG003+
+
+*----------------- Screen für ALV dispaly ----------------------------*
+* Variante
+SELECTION-SCREEN BEGIN OF BLOCK 0 WITH FRAME TITLE text-s02.
+PARAMETERS: p_vari LIKE disvariant-variant.
+PARAMETERS: code LIKE disvariant-log_group NO-DISPLAY.
+SELECT-OPTIONS : auart    FOR vbkred-auart.                 "ND001
+SELECTION-SCREEN END OF BLOCK 0.
+*----------------------------------------------------------------------*
+INITIALIZATION.
+
+*  MOVE 'I'    TO gbstk-sign.
+*  MOVE 'BT'   TO gbstk-option.
+*  MOVE 'A'    TO gbstk-low.
+*  MOVE 'B'    TO gbstk-high.
+*  APPEND gbstk.
+
+*--------------------  ALV Verarbeitungsblock -------------------------*
+  k_repid = sy-repid.
+  k_tabname_header = 'POSTAB'.
+  k_tabname_item   = 'XVBKREDET'.
+
+* define keyinfo
+  CLEAR kr_keyinfo.
+  kr_keyinfo-header01 = 'VBELN'.
+  kr_keyinfo-item01   = 'VBELN'.
+  kr_keyinfo-header02 =  space.
+  kr_keyinfo-item02   = 'POSNR'.
+  GET PARAMETER ID 'KKL' FIELD flg_kkl.
+  PERFORM fieldcat_init  USING kr_fieldcat[].
+  PERFORM eventtab_build USING kr_events[].
+  PERFORM sp_group_build USING kr_sp_group[].
+*
+* Schalter Varianten benutzerspezifisch/allgemein speicherbar setzen
+* Set Options: save variants userspecific or general
+  k_save = 'A'.
+  PERFORM variant_init.
+** Get default variant
+  kr_variant = k_variant.
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+    EXPORTING
+      i_save     = k_save
+    CHANGING
+      cs_variant = kr_variant
+    EXCEPTIONS
+      not_found  = 2.
+  IF sy-subrc = 0.
+    p_vari = kr_variant-variant.
+  ENDIF.
+* Process on value request
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_vari.
+  PERFORM f4_for_variant USING    k_variant
+                                  k_save
+                         CHANGING kr_variant.
+
+* PAI
+AT SELECTION-SCREEN.
+  PERFORM pai_of_selection_screen.
+
+START-OF-SELECTION.
+
+GET vbkred.
+  PERFORM vbkred_fuellen.
+
+GET vbkredet.
+  MOVE vbkredet TO xvbkredet. APPEND xvbkredet.
+
+END-OF-SELECTION.
+  SORT xvbkredet BY mandt vbeln posnr etenr.
+* set flag to save open credit values for working in dialogue.
+  CALL FUNCTION 'SD_CREDIT_OPEN_VALUES_SAVE'.
+*
+  DESCRIBE TABLE postab LINES sy-tfill.
+
+  IF sy-tfill = 0.
+    MESSAGE s420.
+    IF callmode = 'X'.
+      LEAVE PROGRAM.
+    ELSE.
+      EXIT.
+    ENDIF.
+  ENDIF.
+  PERFORM user_sort USING rcode.
+  PERFORM tausender_werte.
+  rv75a-strep = 'X'.
+  aktyp       = 'V'.
+  ASSIGN (viewname) TO <struktur>.
+  PERFORM layout_build USING kr_layout."wegen Seltionskennzeichen
+*Begin of change by ND001.
+  IF NOT auart[] IS INITIAL.
+    DELETE postab WHERE NOT auart IN auart AND vbtyp = 'C'.
+  ENDIF.
+*End of change by ND001.
+
+* Begin of CHG003+
+  IF NOT postab[] IS INITIAL.
+* Retrieve the credit account from VBAK
+    SELECT vbeln netwr knkli
+    FROM vbak
+    INTO TABLE gt_knkli
+    FOR ALL ENTRIES IN postab
+    WHERE vbeln = postab-vbeln.
+    IF sy-subrc = 0.
+      gt_odrval[] = gt_knkli[].
+      SORT gt_odrval BY vbeln.
+    ENDIF.
+* Retrieve the credit account from LIKP
+    SELECT vbeln knkli ternr xblnr
+    FROM likp
+    INTO TABLE gt_likp
+    FOR ALL ENTRIES IN postab
+    WHERE vbeln = postab-vbeln.
+    IF sy-subrc = 0.
+      SORT gt_likp BY vbeln.
+      SORT gt_knkli BY vbeln.
+      CLEAR wa_likp.
+      LOOP AT gt_likp INTO wa_likp.
+        CLEAR wa_knkli.
+        READ TABLE gt_knkli INTO wa_knkli WITH KEY vbeln = wa_likp-vbeln
+        BINARY SEARCH.
+        IF sy-subrc NE 0 OR wa_knkli-knkli IS INITIAL.
+          wa_knkli-vbeln = wa_likp-vbeln.
+          wa_knkli-knkli = wa_likp-knkli.
+          APPEND wa_knkli TO gt_knkli.
+          CLEAR wa_knkli.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+* Begin of CHG004+
+    IF NOT gt_likp[] IS INITIAL.
+* Retrieve data from SD document: Delivery: Item data (LIPS)
+      SELECT vbeln posnr vgbel netwr
+      FROM lips
+      INTO TABLE gt_lips
+      FOR ALL ENTRIES IN gt_likp
+      WHERE vbeln = gt_likp-vbeln.
+      IF sy-subrc = 0.
+        SORT gt_lips BY vbeln.
+* Retrieve data from Sales Document: Business Data (VBKD)
+        SELECT vbeln posnr zterm
+        FROM vbkd
+        INTO TABLE gt_vbkd
+        FOR ALL ENTRIES IN gt_lips
+        WHERE vbeln = gt_lips-vgbel.
+        IF sy-subrc = 0.
+          SORT gt_vbkd BY vbeln.
+        ENDIF.
+* calculate net sum.
+        LOOP AT gt_lips INTO wa_lips.
+          AT END OF vbeln.
+            SUM.
+            APPEND wa_lips TO gt_netsum.
+            CLEAR wa_lips.
+          ENDAT.
+        ENDLOOP.
+      ENDIF.
+
+      gt_likptmp[] = gt_likp[].
+      DELETE ADJACENT DUPLICATES FROM gt_likptmp COMPARING xblnr.
+* Retrieve delivery data from Sales Document: Header Data
+      SELECT vbeln bstnk aufnr
+      FROM vbak
+      INTO TABLE gt_pordr
+      FOR ALL ENTRIES IN gt_likptmp
+      WHERE vbeln = gt_likptmp-xblnr+0(10).
+      IF sy-subrc = 0.
+        SORT gt_pordr BY vbeln.
+      ENDIF.
+    ENDIF.
+
+* Populate the range for all the orders and delivery documents
+    CLEAR: wa_knkli.
+    LOOP AT gt_knkli INTO wa_knkli.
+      CLEAR wa_odrval.
+      READ TABLE gt_odrval INTO wa_odrval WITH KEY vbeln  = wa_knkli-vbeln
+      BINARY SEARCH.
+      IF sy-subrc = 0.
+        wa_vbrng-sign = 'I'.
+        wa_vbrng-option = 'EQ'.
+        wa_vbrng-low = wa_odrval-vbeln.
+        APPEND wa_vbrng TO gt_vbrng.
+        CLEAR wa_vbrng.
+      ENDIF.
+      CLEAR wa_likp.
+      READ TABLE gt_likp INTO wa_likp WITH KEY vbeln = wa_knkli-vbeln
+      BINARY SEARCH.
+      IF sy-subrc = 0.
+        wa_vbrng-sign = 'I'.
+        wa_vbrng-option = 'EQ'.
+        wa_vbrng-low = wa_likp-xblnr+0(10).
+        APPEND wa_vbrng TO gt_vbrng.
+        CLEAR wa_vbrng.
+      ENDIF.
+    ENDLOOP.
+
+    IF NOT gt_vbrng IS INITIAL.
+* Retrieve data from Sales Document: Item Data
+      SELECT vbeln posnr netwr kwmeng mwsbp                        "YG09157 2008.08.28   kwmeng: total order item qty
+      FROM vbap
+      INTO TABLE gt_vbap
+      WHERE vbeln IN gt_vbrng
+        AND abgru = space.                                          "YG09157 2008.08.20
+
+      IF sy-subrc = 0.
+        SORT gt_vbap BY vbeln posnr.
+* Retrieve data from Sales Document Flow
+        SELECT vbelv posnv vbtyp_n vbeln rfmng                      "YG09157 2008.08.28   rfmng
+        FROM vbfa
+        INTO TABLE gt_vbfa
+        FOR ALL ENTRIES IN gt_vbap
+        WHERE vbelv = gt_vbap-vbeln
+        AND   posnv = gt_vbap-posnr
+        AND ( vbtyp_n = gc_vbtyp_j OR vbtyp_n EQ 'M' or vbtyp_n EQ 'H' ).   "YG09157 2008.08.20
+
+        IF sy-subrc = 0.
+
+          SORT gt_vbfa BY vbelv posnv.
+          CLEAR wa_vbfa.
+
+          LOOP AT gt_vbfa INTO wa_vbfa.
+
+            on change of wa_vbfa-vbelv or wa_vbfa-posnv.    "SP001
+
+              CLEAR wa_vbap.
+
+              READ TABLE gt_vbap INTO wa_vbap WITH KEY vbeln = wa_vbfa-vbelv
+                                                       posnr = wa_vbfa-posnv BINARY SEARCH.
+              IF sy-subrc = 0.
+                IF wa_vbfa-vbtyp_n = gc_vbtyp_j.
+                  g_netval = g_netval + wa_vbap-netwr.
+                ELSE.
+                  g_netval = g_netval - wa_vbap-netwr.       "YG09157 2008.08.20  delivery return
+                ENDIF.
+              ENDIF.
+            endon.                                          "SP001
+
+            AT END OF vbelv.
+              wa_netval-vbeln = wa_vbfa-vbelv.
+              wa_netval-value = g_netval.
+              APPEND wa_netval TO gt_netval.
+              CLEAR: wa_netval, g_netval.
+            ENDAT.
+
+          ENDLOOP.
+
+          SORT gt_netval BY vbeln.
+        ENDIF.
+
+      ENDIF.
+    ENDIF.
+
+* End of CHG004+
+
+    IF NOT gt_knkli[] IS INITIAL.
+      SORT gt_knkli BY vbeln.
+* Get the partner numbers
+      SELECT relnr      "BP Relationship Number
+       partner1   "Business Partner Number
+       partner2   "Business Partner Number
+       date_to    "Validity Date (Valid To)
+INTO TABLE gt_but050
+FROM but050    "BP relationships/role definitions: General data
+WHERE reltyp = gc_ukm001.
+      IF sy-subrc EQ 0.
+        CLEAR wa_knkli.
+        LOOP AT gt_knkli INTO wa_knkli.
+          CLEAR wa_but050.
+* Get the highest level credit account.
+          READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                                     partner2 = wa_knkli-knkli.
+          IF sy-subrc = 0.
+            READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                            partner2 = wa_but050-partner1.
+            WHILE sy-subrc EQ 0.
+              READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                                 partner2 = wa_but050-partner1.
+            ENDWHILE.
+            wa_knkli-knkli = wa_but050-partner1.
+            MODIFY gt_knkli FROM wa_knkli  TRANSPORTING knkli.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+* retrieve the risk class.
+    SELECT partner
+           risk_class
+    FROM ukmbp_cms
+    INTO TABLE gt_ukm_cms
+    FOR ALL ENTRIES IN gt_knkli
+    WHERE partner = gt_knkli-knkli.
+    IF sy-subrc = 0.
+      SORT gt_ukm_cms BY partner.
+* Retrieve the Risk Class text
+      SELECT * FROM ukm_risk_cl0t
+      INTO TABLE gt_risktxt
+      FOR ALL ENTRIES IN gt_ukm_cms
+      WHERE langu = sy-langu
+      AND risk_class = gt_ukm_cms-risk_class.
+      IF sy-subrc = 0.
+        SORT gt_risktxt BY risk_class.
+      ENDIF.
+    ENDIF.
+* Retrieve the credit limit.
+    SELECT  partner    "Business Partner Number
+       credit_sgmnt      "Credit Segment
+       credit_limit      "Credit Limit
+INTO TABLE gt_ukm_sgm
+FROM ukmbp_cms_sgm  "SAP Credit Management: Master Data for Credit Account
+FOR ALL ENTRIES IN gt_knkli
+WHERE partner = gt_knkli-knkli.
+    IF sy-subrc = 0.
+      SORT gt_ukm_sgm BY partner.
+    ENDIF.
+
+    LOOP AT postab.
+
+* Begin of CHG004+
+* Populating the Order# for Sales order
+      IF NOT postab-vbeln IS INITIAL.
+        postab-zvbeln2 = postab-vbeln.
+        MODIFY postab TRANSPORTING zvbeln2.
+      ENDIF.
+
+      CLEAR wa_lips.
+      READ TABLE gt_lips INTO wa_lips WITH KEY vbeln = postab-vbeln
+      BINARY SEARCH.
+      IF sy-subrc = 0.
+* Populating the Payment Terms (ZTERM).
+        CLEAR wa_vbkd.
+        READ TABLE gt_vbkd INTO wa_vbkd WITH KEY vbeln = wa_lips-vgbel
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          postab-zterm = wa_vbkd-zterm.
+          MODIFY postab TRANSPORTING zterm.
+        ENDIF.
+* Populating Net value (NETWR) for delivery
+        CLEAR wa_netsum.
+        READ TABLE gt_netsum INTO wa_netsum WITH KEY vbeln = wa_lips-vbeln
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          postab-netwr = wa_netsum-netwr.
+          MODIFY postab TRANSPORTING netwr.
+        ENDIF.
+      ENDIF.
+
+* Populating the Order value.
+* YG09157 begin
+*      CLEAR wa_odrval.
+*      READ TABLE gt_odrval INTO wa_odrval WITH KEY vbeln = postab-vbeln
+*      BINARY SEARCH.
+*      IF sy-subrc = 0.
+*        postab-zorderval = wa_odrval-netwr.
+*        MODIFY postab TRANSPORTING zorderval.
+*      ENDIF.
+* YG09157 end
+
+* Populating Order Number
+      CLEAR wa_likp.
+      READ TABLE gt_likp INTO wa_likp WITH KEY vbeln = postab-vbeln
+      BINARY SEARCH.
+      IF sy-subrc = 0.
+* Populate the purchase order number and Order# for deliveries.
+        CLEAR wa_pordr.
+        READ TABLE gt_pordr INTO wa_pordr WITH KEY vbeln = wa_likp-xblnr
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          postab-bstnk = wa_pordr-bstnk.
+          postab-zvbeln2 = wa_pordr-vbeln.
+          MODIFY postab TRANSPORTING bstnk zvbeln2.
+        ENDIF.
+*Populating the delivery value (KZWI3)
+* YG09157 2008.07.30 begin
+*        CLEAR wa_netval.
+*        READ TABLE gt_netval INTO wa_netval WITH KEY vbeln = wa_likp-xblnr
+*        BINARY SEARCH.
+*        IF sy-subrc = 0.
+*          postab-kzwi3 = wa_netval-value.
+*          IF postab-zorderval IS INITIAL.
+*            postab-zorderval = wa_netval-value.
+*          ENDIF.
+*          MODIFY postab TRANSPORTING kzwi3 zorderval.
+*        ENDIF.
+* YG09157 2008.07.30 end
+      ENDIF.
+
+*Populating the delivery value and order value:
+* YG09157 2008.07.30 begin
+
+      FIELD-SYMBOLS: <gt_vbfa> LIKE LINE OF gt_vbfa,
+                     <gt_vbap> LIKE LINE OF gt_vbap.
+
+      DATA: v_delivery_doc(1) TYPE c,
+            v_netpr TYPE netpr,         "YG09157 2008.08.28
+            v_netwr TYPE netwr.
+
+      CLEAR: v_delivery_doc,
+             postab-zorderval,
+             postab-kzwi3.
+
+
+      LOOP AT gt_vbfa ASSIGNING <gt_vbfa> WHERE vbeln = postab-vbeln      "delivery doc
+                                            AND vbelv = postab-zvbeln2.   "order#
+
+        READ TABLE gt_vbap ASSIGNING <gt_vbap> WITH KEY vbeln = <gt_vbfa>-vbelv
+                                                        posnr = <gt_vbfa>-posnv
+                                                        BINARY SEARCH.
+        IF sy-subrc = 0.
+
+          CLEAR: v_netpr,  v_netwr.
+
+          IF <gt_vbap>-kwmeng <> 0 AND <gt_vbap>-kwmeng <> <gt_vbfa>-rfmng.
+            v_netpr = ABS( ( <gt_vbap>-netwr + <gt_vbap>-mwsbp ) / <gt_vbap>-kwmeng ).
+            v_netwr = v_netpr * <gt_vbfa>-rfmng.
+          ELSE.
+            v_netwr = <gt_vbap>-netwr + <gt_vbap>-mwsbp.
+          ENDIF.
+
+          IF <gt_vbfa>-vbtyp_n = gc_vbtyp_j.
+            postab-kzwi3     = postab-kzwi3  + v_netwr.   "delivery value     "YG09157 2008.08.28
+          ELSEIF <gt_vbfa>-vbtyp_n = 'M'.
+            select single * from vbrk where vbeln = <gt_vbfa>-vbeln."SP001
+            IF vbrk-fksto <> 'X'.                           "SP001
+              postab-kzwi3     = postab-kzwi3  - v_netwr.
+            ENDIF.                                          "SP001
+
+          ENDIF.
+        ENDIF.
+
+        v_delivery_doc = 'X'.
+
+      ENDLOOP.
+**************************************************      SP001
+      IF v_delivery_doc IS INITIAL.
+        postab-sbgrp_new = postab-sbgrp.
+      else.
+        select single * from vbak where vbeln = postab-zvbeln2.
+        if sy-subrc eq 0.
+          postab-sbgrp_new = postab-sbgrp = vbak-sbgrp.
+        endif.
+      endif.
+      modify postab transporting sbgrp sbgrp_new where vbeln = postab-vbeln.
+*********************************************************SP001
+      IF v_delivery_doc IS INITIAL.
+
+        LOOP AT gt_vbfa ASSIGNING <gt_vbfa> WHERE vbelv = postab-vbeln.      "Sales order doc
+
+
+
+          READ TABLE gt_vbap ASSIGNING <gt_vbap> WITH KEY vbeln = <gt_vbfa>-vbelv
+                                                          posnr = <gt_vbfa>-posnv
+                                                          BINARY SEARCH.
+
+          IF sy-subrc = 0.
+
+            CLEAR: v_netpr,  v_netwr.
+            "YG09157 2008.08.28
+
+            IF <gt_vbap>-kwmeng <> 0 AND <gt_vbap>-kwmeng <> <gt_vbfa>-rfmng.
+              v_netpr = ABS( ( <gt_vbap>-netwr + <gt_vbap>-mwsbp ) / <gt_vbap>-kwmeng ).
+              v_netwr = v_netpr * <gt_vbfa>-rfmng.
+            ELSE.
+              v_netwr = <gt_vbap>-netwr + <gt_vbap>-mwsbp.
+            ENDIF.
+
+            IF <gt_vbfa>-vbtyp_n = gc_vbtyp_j.
+              postab-kzwi3     = postab-kzwi3  + v_netwr.   "delivery value     "YG09157 2008.08.28
+            Else.
+              IF <gt_vbfa>-vbtyp_n = 'M'.
+                select single * from vbrk where vbeln = <gt_vbfa>-vbeln."SP001
+                IF vbrk-fksto <> 'X'.                       "SP001
+                  postab-kzwi3     = postab-kzwi3  - v_netwr.
+                ENDIF.                                      "SP001
+*            ELSE.                                                      "SP001
+*              postab-kzwi3     = postab-kzwi3  - v_netwr.   "delivery returns   "YG09157 2008.08.28
+              ENDIF.
+            ENDIF.
+
+          ENDIF.
+
+
+        ENDLOOP.
+
+      ENDIF.
+
+      LOOP AT gt_vbap ASSIGNING <gt_vbap> WHERE vbeln = postab-zvbeln2.
+
+***************************Begin of SP001
+        postab-zorderval = postab-zorderval + ( <gt_vbap>-netwr + <gt_vbap>-mwsbp ).   "order value
+
+        READ TABLE gt_vbfa ASSIGNING <gt_vbfa> WITH KEY vbelv = <gt_vbap>-vbeln
+                                                        posnv = <gt_vbap>-posnr BINARY SEARCH.
+
+        IF sy-subrc = 0.
+
+          IF <gt_vbap>-kwmeng <> 0 AND <gt_vbap>-kwmeng <> <gt_vbfa>-rfmng.
+            v_netpr = ABS( ( <gt_vbap>-netwr + <gt_vbap>-mwsbp ) / <gt_vbap>-kwmeng ).
+            v_netwr = v_netpr * <gt_vbfa>-rfmng.
+          ELSE.
+            v_netwr = <gt_vbap>-netwr + <gt_vbap>-mwsbp.
+          ENDIF.
+
+          IF <gt_vbfa>-vbtyp_n = 'H'.
+            postab-zorderval = postab-zorderval - v_netwr.   "order value return  "YG09157 2008.08.20
+          ENDIF.
+        ENDIF.
+***************************End of SP001
+      ENDLOOP.
+
+      MODIFY postab TRANSPORTING kzwi3 zorderval.
+
+* YG09157 2008.07.30 end
+
+
+
+* Populating Credit Account
+      CLEAR wa_knkli.
+      READ TABLE gt_knkli INTO wa_knkli WITH KEY vbeln = postab-vbeln
+      BINARY SEARCH.
+      IF sy-subrc = 0.
+        postab-knkli = wa_knkli-knkli.
+        MODIFY postab TRANSPORTING knkli.
+* Populating Risk class.
+        CLEAR wa_ukm_cms.
+        READ TABLE gt_ukm_cms INTO wa_ukm_cms WITH KEY partner = wa_knkli-knkli
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          postab-ctlpc = wa_ukm_cms-risk_class.
+          MODIFY postab TRANSPORTING ctlpc.
+        ENDIF.
+
+* Polpulating Credit limit and Open Credit Limit
+        CLEAR wa_ukm_sgm.
+        READ TABLE gt_ukm_sgm INTO wa_ukm_sgm WITH KEY partner = wa_knkli-knkli
+        BINARY SEARCH.
+        IF sy-subrc = 0.
+          postab-zz_klimk = wa_ukm_sgm-credit_limit.
+          MODIFY postab TRANSPORTING zz_klimk.
+* get the open order amount
+          CALL FUNCTION 'UKM_COMMTS_READ'
+            EXPORTING
+              i_partner     = wa_ukm_sgm-partner
+              i_segment     = wa_ukm_sgm-credit_sgmnt
+            TABLES
+              et_ukm_totals = gt_ukm_totals.
+          IF sy-subrc = 0.
+            CLEAR: wa_ukm_totals.
+            LOOP AT gt_ukm_totals INTO wa_ukm_totals.
+* Calculate the total credit exposure
+              g_totexp = g_totexp + wa_ukm_totals-amount.
+            ENDLOOP.
+* Calculate the open credit limit
+            postab-zz_opn_klimk = wa_ukm_sgm-credit_limit - g_totexp.
+            MODIFY postab TRANSPORTING zz_opn_klimk.
+            CLEAR g_totexp.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+* End of CHG003+
+
+*  IF NOT flg_kkl IS INITIAL.
+*    PERFORM reuse_alv_hierseq_list_display.
+*  ELSE.
+*    PERFORM reuse_alv_list_display.
+*  ENDIF.
+EXPORT postab to MEMORY id 'ZRVKRED'.
+
+AT USER-COMMAND.
+  CASE sy-ucomm.
+
+    WHEN 'LPRO'.                       " Langtext Protokoll
+      PERFORM protokoll_langtext.
+  ENDCASE.
+
+TOP-OF-PAGE.
+  INCLUDE rvkredp2.
+
+TOP-OF-PAGE DURING LINE-SELECTION.
+  INCLUDE rvkredp2.
+
+* ------ Module --------------------------------------------------------
+* ------ Form-Routinen -------------------------------------------------
+* - Include mit der Endung 'C' enthalten in der Regel Routinen, die auch
+* -         von anderen Anzeigen genutz werden können, entsprechnde
+* -         Routinen in SP heiße MV75AxxC
+
+  INCLUDE rvkredb0.
+  INCLUDE mv75affc.
+  INCLUDE mv75afic.
+  INCLUDE rvkredm0.                    "Module PAI und PBO
+  INCLUDE rvkredv0.
+* ------ PF15 ------------------------------------------------------- *
+  INCLUDE menuretn.
+
+* ------ RV-spezifische Routinen ------------------------------------ *
+
+* Kundenmodifikationen
+  INCLUDE rvkrefz1.
+  INCLUDE rvkrefz2.
+  INCLUDE rvkrefz3.
+*--------------------- ALV-spezifische Includes -----------------------*
+* Begin of CHG001-
+* INCLUDE rvkrealv.
+* End of CHG001-
+* Begin of CHG001+
+  INCLUDE zrvkrealv.
+* End of CHG001+
+* Begin of CHG001-
+*   INCLUDE rvkalvat..
+* End of CHG001-
+* Begin of CHG001+
+  INCLUDE zrvkalvat..
+* End of CHG001+
+*   Created by TEAM266 for PM4480 05/16/2003 X03K913294 {
+*  include RVALVFORMS
+  INCLUDE zrvalvforms_pcec.
+*   Created by TEAM266 for PM4480 05/16/2003 X03K913294 }
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Module  LISTAUSGABE  OUTPUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+MODULE listausgabe OUTPUT.
+
+  LEAVE TO LIST-PROCESSING AND RETURN TO SCREEN 0.
+  CASE sy-ucomm.
+    WHEN 'PROT'.
+      PERFORM protokoll.
+    WHEN 'LEGE'.
+      PERFORM  okcode_lege.
+  ENDCASE.
+  LEAVE SCREEN.
+ENDMODULE.                             " LISTAUSGABE  OUTPUT
