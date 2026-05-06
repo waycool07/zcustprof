@@ -1,0 +1,1345 @@
+*& Report  UKM_COMMTS_DISPLAY                                          *
+*&                                                                     *
+*&---------------------------------------------------------------------*
+*&                                                                     *
+*&                                                                     *
+*&---------------------------------------------------------------------*
+
+REPORT  ukm_commts_display  MESSAGE-ID  ukm_comm.
+
+TABLES: ukmbp_cms_sgm,
+        ukm_totals.
+*        ukm_ext_guid.
+
+
+DATA: gt_acc TYPE TABLE OF ukm_s_account.
+DATA: gs_acc LIKE LINE OF gt_acc.
+
+DATA: gt_partner TYPE TABLE OF bu_partner,
+      gt_segment TYPE TABLE OF ukm_credit_sgmnt.
+
+DATA: gt_totals TYPE TABLE OF ukm_totals,
+      gt_totals_source TYPE TABLE OF ukm_s_totals_source,
+      gs_totals_source LIKE LINE OF gt_totals_source.
+*      gs_totals LIKE LINE OF gt_totals.
+DATA: gs_enq LIKE ukm_enqcomm.
+
+RANGES: r_error FOR ukmbp_cms_sgm-item_error.
+* neu - mit zusätzlichen Daten
+DATA: gt_comm_typ LIKE TABLE OF ukm_s_comm_typ WITH HEADER LINE.
+DATA: l_but000 LIKE but000,
+      lname LIKE bus000flds-descrip.                        "(220).
+DATA: BEGIN OF ls_totalsdisplay.
+        INCLUDE STRUCTURE ukm_s_totals_display.
+DATA: credit_sgmnt_txt LIKE ukmcred_sgm0t-credit_sgmnt_txt,
+      name_last LIKE bus000flds-descrip,
+      END OF ls_totalsdisplay.
+data: new_ls_totalsdisplay like ls_totalsdisplay.
+DATA: gt_totalsdisplay LIKE TABLE OF ls_totalsdisplay.
+
+DATA: lt_display TYPE TABLE OF ukm_s_totals_display,
+      ls_display LIKE LINE OF lt_display.
+.
+
+*--
+DATA:
+      gt_item TYPE TABLE OF ukm_item.
+
+* used for update
+DATA:
+  lt_item TYPE TABLE OF ukm_item,
+  lt_totals TYPE TABLE OF ukm_totals,
+  lt_totals_abs TYPE TABLE OF ukm_totals,
+  lt_pm_balance TYPE TABLE OF ukm_pm_balance.
+
+DATA: g_main_segment LIKE ukm_item-credit_sgmnt.
+DATA: alv_item TYPE TABLE OF v_ukm_item.
+DATA: alv_pm_balance TYPE TABLE OF ukm_pm_balance.
+
+
+DATA: x_inferior.  "show details of inferior accounts
+*
+*alv daten
+* ALV
+TYPE-POOLS: slis.
+* Includes
+INCLUDE <icon>.
+INCLUDE <symbol>.
+
+*CONSTANTS:
+*gc_formname_top_of_page TYPE slis_formname VALUE 'TOP_OF_PAGE'.
+DATA: gt_fieldcat TYPE slis_t_fieldcat_alv,
+*      gs_grid_settings TYPE lvc_s_glay,
+      gs_layout   TYPE slis_layout_alv,
+      gs_print    TYPE slis_print_alv,
+      gt_sort     TYPE slis_t_sortinfo_alv,
+      gt_sp_group TYPE slis_t_sp_group_alv,
+      gt_events   TYPE slis_t_event,
+      g_formname_user_command TYPE slis_formname VALUE
+      'ALV_USER_COMMAND',
+      g_formname_user_commanda TYPE slis_formname VALUE
+      'ALV_USER_COMMANDA',
+      g_formname_pf_status    TYPE slis_formname VALUE
+      'ALV_PF_STATUS_SET',
+      g_formname_pf_statusa   TYPE slis_formname VALUE
+      'ALV_PF_STATUS_SETA'.
+DATA: g_repid LIKE sy-repid.
+DATA: gt_list_top_of_page TYPE slis_t_listheader.
+DATA: gt_list_top_of_pagea TYPE slis_t_listheader.
+DATA: gt_list_end_of_list TYPE slis_t_listheader.
+DATA:
+            g_save(1) TYPE c,
+            g_exit(1) TYPE c.
+DATA:       gx_variant LIKE disvariant,
+            g_variant LIKE disvariant.
+**
+DATA: sel_segment TYPE  ukm_t_credit_sgmnt_ranges.
+
+
+SELECT-OPTIONS: s_partnr FOR ukmbp_cms_sgm-partner,
+                s_segmt FOR ukmbp_cms_sgm-credit_sgmnt,
+                s_comtyp FOR ukm_totals-comm_typ, "nicht ter
+                s_curr  FOR ukm_totals-currency NO-DISPLAY.
+PARAMETER:      p_date LIKE ukm_parameter-eff_date.
+
+PARAMETERS:     x_err  AS CHECKBOX, "nur mit item_error = 'X'
+                x_pend AS CHECKBOX. "nur mit Pending messages.
+PARAMETERS:     p_vari LIKE disvariant-variant.
+PARAMETERS:     x_bupr LIKE ukm_parameter-xbupr DEFAULT 'X'.
+
+SELECTION-SCREEN BEGIN OF BLOCK 01 WITH FRAME TITLE text-200.
+PARAMETERS:     del_tot  LIKE ukm_comm_dynpro_fields-del_totals.
+PARAMETERS:     del_item LIKE ukm_comm_dynpro_fields-del_item.
+
+PARAMETERS:     rebuild LIKE ukm_parameter-xrebuild.
+SELECTION-SCREEN END OF BLOCK 01.
+PARAMETER: p_show(1) DEFAULT ' ' NO-DISPLAY .
+* if called by transaction UKM_BP
+PARAMETERS:     x_single(1) NO-DISPLAY.
+
+SELECTION-SCREEN BEGIN OF SCREEN 0900 TITLE text-100 AS WINDOW.
+
+PARAMETERS:     ps_date LIKE ukm_parameter-eff_date.
+
+SELECTION-SCREEN END OF SCREEN 0900.
+
+
+INITIALIZATION.
+  g_repid = sy-repid.
+* Schalter Varianten benutzerspezifisch/allgemein speicherbar szen
+* Set Options: save variants userspecific or general
+  g_save = 'A'.
+  CLEAR g_variant.
+  g_variant-report = g_repid.
+  g_variant-handle = '0001'.
+* Get default variant
+  gx_variant = g_variant.
+  CALL FUNCTION 'REUSE_ALV_VARIANT_DEFAULT_GET'
+    EXPORTING
+      i_save     = g_save
+    CHANGING
+      cs_variant = gx_variant
+    EXCEPTIONS
+      not_found  = 2.
+  IF sy-subrc = 0.
+    p_vari = gx_variant-variant.
+  ENDIF.
+************
+  PERFORM set_get_params USING 'GET'.
+
+
+AT SELECTION-SCREEN.
+  DATA:
+    l_activity(2) TYPE n.
+
+  IF NOT rebuild  IS INITIAL OR
+     NOT del_item IS INITIAL OR
+     NOT del_tot  IS INITIAL.
+    l_activity = '02'.
+  ELSE.
+    l_activity = '03'.
+  ENDIF.
+
+  SELECT credit_sgmnt FROM ukmcred_sgm0c INTO ukmbp_cms_sgm-credit_sgmnt
+      WHERE credit_sgmnt IN s_segmt.
+    AUTHORITY-CHECK OBJECT 'F_UKM_SGMT'
+         ID 'ACTVT' FIELD l_activity
+         ID 'UKM_SGMNT' FIELD ukmbp_cms_sgm-credit_sgmnt.
+    IF sy-subrc <> 0.
+      MESSAGE e002(ukm_bp) WITH ukmbp_cms_sgm-credit_sgmnt.
+    ENDIF.
+  ENDSELECT.
+
+
+
+
+* Process on value request
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_vari.
+  PERFORM alv_f4_for_variant.
+
+
+START-OF-SELECTION.
+*
+*-------------set params
+  PERFORM set_get_params USING 'SET'.
+
+DATA: i_sel TYPE STANDARD TABLE OF rsparams WITH HEADER LINE.
+  IMPORT i_sel FROM MEMORY ID 'ZCREX'.
+  IF i_sel[] IS NOT INITIAL.
+    LOOP AT i_sel .
+      CASE  i_sel-selname.
+        WHEN 'S_PARTNR'.
+          CHECK i_sel-low IS NOT INITIAL.
+          s_partnr-sign = 'I'.
+          s_partnr-option = 'EQ'.
+          s_partnr-low = i_sel-low.
+          APPEND s_partnr.
+         WHEN 'P_SHOW'.
+          CHECK i_sel-low IS NOT INITIAL.
+          p_show = i_sel-low.
+        endcase.
+      ENDLOOP.
+   endif.
+*
+  IF NOT ps_date IS INITIAL.
+    p_date = ps_date.
+  ENDIF.
+  g_variant-variant = p_vari.
+
+  PERFORM alv_e01_fieldcat_init  USING gt_fieldcat[].
+  PERFORM alv_e03_eventtab_build USING gt_events[].
+  PERFORM alv_e04_comment_build  USING gt_list_top_of_page[].
+  PERFORM alv_e08_comment_build  USING gt_list_end_of_list[].
+  PERFORM alv_e06_t_sort_build   USING gt_sort[].
+  PERFORM alv_e07_sp_group_build USING gt_sp_group[].
+*
+* Hauptkreditsegment
+  PERFORM set_main_segment.
+  PERFORM alv_set_fieldcat.
+
+  IF x_bupr <> space.
+    x_inferior = space.
+  ELSE.
+    x_inferior = 'X'.
+  ENDIF.
+*
+* setup main segment result
+  IF g_main_segment IN s_segmt.
+    CALL FUNCTION 'UKM_COMMTS_SET_SEGMENT_SELOPT'
+      IMPORTING
+        et_range = sel_segment.
+    IF x_pend IS INITIAL AND x_err IS INITIAL.
+      SELECT DISTINCT *
+             FROM ukm_totals
+             INTO CORRESPONDING FIELDS OF TABLE gt_acc
+             WHERE partner IN s_partnr
+             AND ( credit_sgmnt IN sel_segment
+             OR  credit_sgmnt = g_main_segment ).
+* Hauptsegment einsetzen
+      LOOP AT gt_acc INTO gs_acc.
+        gs_acc-credit_sgmnt = g_main_segment.
+        MODIFY gt_acc FROM gs_acc TRANSPORTING credit_sgmnt.
+      ENDLOOP.
+    ENDIF.
+  ENDIF.
+
+* do varios selections
+  IF x_pend IS INITIAL.
+    REFRESH r_error. CLEAR r_error.
+    IF NOT x_err IS INITIAL.
+      CLEAR r_error.
+      r_error-low = 'X'.
+      r_error-sign = 'I'.
+      r_error-option = 'EQ'.
+      APPEND r_error.
+    ENDIF.
+* select by ukm_totals
+    IF NOT s_curr[] IS INITIAL OR
+     NOT s_comtyp[] IS INITIAL.
+      SELECT DISTINCT * FROM ukm_totals
+              APPENDING CORRESPONDING FIELDS OF TABLE gt_acc
+              WHERE partner IN s_partnr
+               AND credit_sgmnt IN s_segmt
+               AND currency IN s_curr
+               AND comm_typ IN s_comtyp.
+    ENDIF.
+*  use the credit accounts
+    SELECT * FROM ukmbp_cms_sgm
+                  APPENDING CORRESPONDING FIELDS OF TABLE gt_acc
+                  WHERE partner IN s_partnr
+                  AND credit_sgmnt IN s_segmt
+                  AND item_error IN r_error.
+
+
+  ELSE.
+*  nur welche mit pending messages
+    SELECT DISTINCT * FROM ukm_pm_balance
+                 APPENDING CORRESPONDING FIELDS OF TABLE gt_acc
+                 WHERE partner IN s_partnr
+                 AND credit_sgmnt IN s_segmt
+                 AND currency IN s_curr
+                 AND comm_typ IN s_comtyp.
+    .
+
+  ENDIF.
+
+  SORT gt_acc.
+  IF NOT x_single IS INITIAL.
+    LOOP AT s_partnr.
+      gs_acc-partner = s_partnr-low.
+    ENDLOOP.
+    LOOP AT s_segmt.
+      gs_acc-credit_sgmnt = s_segmt-low.
+    ENDLOOP.
+    APPEND gs_acc TO gt_acc.
+    SORT gt_acc.
+  ENDIF.
+  DELETE ADJACENT DUPLICATES FROM gt_acc.
+* duplicates removed
+  IF NOT rebuild IS INITIAL OR NOT del_item IS INITIAL.
+    SELECT DISTINCT *
+         FROM ukm_item
+         APPENDING CORRESPONDING FIELDS OF TABLE gt_acc
+         WHERE partner IN s_partnr
+         AND comm_typ   IN s_comtyp
+         AND currency   IN s_curr
+         AND credit_sgmnt IN s_segmt.
+    SORT gt_acc.
+    DELETE ADJACENT DUPLICATES FROM gt_acc.
+
+  ENDIF.
+* partner beziehungen auswerten
+END-OF-SELECTION.
+
+  LOOP AT gt_acc INTO gs_acc.
+    COLLECT gs_acc-partner INTO gt_partner.
+    COLLECT gs_acc-credit_sgmnt INTO gt_segment.
+  ENDLOOP.
+*
+  IF NOT del_tot IS INITIAL OR NOT rebuild IS INITIAL.
+    gs_enq-partner_high = gs_acc-partner.
+    READ TABLE gt_acc INDEX 1 INTO gs_acc.
+    gs_enq-partner_low = gs_acc-partner.
+    CALL FUNCTION 'UKM_ENQUEUE_SET'
+      EXPORTING
+        i_partner_low  = gs_enq-partner_low
+        i_partner_high = gs_enq-partner_high
+      EXCEPTIONS
+        foreign_lock   = 1
+        OTHERS         = 4.
+    CASE sy-subrc.
+      WHEN 1.
+        MESSAGE e001 WITH sy-msgv1 sy-msgv2.
+      WHEN 4.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDCASE.
+
+  ENDIF.
+* differenzierung nach Obligotyp beim Loeschen
+  IF NOT s_comtyp[] IS INITIAL.
+    SELECT * FROM ukmcomm_types INTO CORRESPONDING FIELDS OF
+             TABLE gt_comm_typ
+             WHERE comm_typ IN s_comtyp.
+  ENDIF.
+
+  DATA:
+    lt_partner_package TYPE TABLE OF bu_partner,
+    l_total_size TYPE sy-tabix,
+    l_start      TYPE sy-tabix,
+    l_end        TYPE sy-tabix.
+
+  DESCRIBE TABLE gt_partner LINES l_total_size.
+
+  l_start = 1.
+  l_end   = 0.
+
+  WHILE l_end < l_total_size.
+    ADD 1000 TO l_end.
+
+    IF l_total_size < l_end.
+      l_end = l_total_size.
+    ENDIF.
+
+    REFRESH lt_partner_package.
+    APPEND LINES OF gt_partner FROM l_start TO l_end
+           TO lt_partner_package.
+
+    CALL FUNCTION 'UKM_COMMTS_BUPR_PREREAD'
+      TABLES
+        t_partner  = lt_partner_package
+        t_segments = gt_segment.
+
+    ADD 1000 TO l_start.
+  ENDWHILE.
+
+
+  IF rebuild IS INITIAL.
+    CALL FUNCTION 'UKM_COMMTS_PREREAD'
+      TABLES
+        t_partner  = gt_partner
+        t_segments = gt_segment.
+  ENDIF.
+
+  CALL FUNCTION 'UKM_COMMTS_BUFFER_REFRESH'
+    EXPORTING
+      new_buffer = 'X'
+      old_buffer = 'X'.
+
+  IF NOT del_tot IS INITIAL OR NOT rebuild IS INITIAL.
+    CALL FUNCTION 'UKM_COMMTS_PREREAD'
+      EXPORTING
+        i_free_table = 'X'.
+  ENDIF.
+
+  LOOP AT gt_acc INTO gs_acc.
+*   delete totals
+    IF NOT del_tot IS INITIAL OR NOT rebuild IS INITIAL.
+      CALL FUNCTION 'UKM_COMMTS_DELETE'
+        EXPORTING
+          i_partner   = gs_acc-partner
+          i_segment   = gs_acc-credit_sgmnt
+        TABLES
+          it_comm_typ = gt_comm_typ.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+*   items löschen
+    IF NOT del_item IS INITIAL.
+      CALL FUNCTION 'UKM_ITEMS_DELETE'
+        EXPORTING
+          i_partner   = gs_acc-partner
+          i_segment   = gs_acc-credit_sgmnt
+        TABLES
+          it_comm_typ = gt_comm_typ.
+      COMMIT WORK AND WAIT.
+    ENDIF.
+*  Neue totals aufbauen
+    IF NOT rebuild IS INITIAL.
+      IF del_item IS INITIAL.
+
+        CALL FUNCTION 'UKM_ITEMS_READ'
+          EXPORTING
+            i_partner         = gs_acc-partner
+            i_segment         = gs_acc-credit_sgmnt
+            i_inferior        = ' '
+*             I_DATE            =
+*             I_IGUID           =
+*             I_FROM_DATE       =
+          TABLES
+            et_ukm_item       = gt_item.
+      ELSE.
+        REFRESH gt_item.
+      ENDIF.
+*    erst mal totals und items aktualisieren
+*     COMMIT WORK.
+      CALL FUNCTION 'UKM_COMMITMENTS_CALCULATE'
+       EXPORTING
+         i_rebuild              = 'X'
+         i_update               = 'X'
+*        I_EFF_DATE             =
+        TABLES
+          t_ukm_item             = gt_item
+             EXCEPTIONS
+        OTHERS = 0.
+
+    ENDIF.
+  ENDLOOP.
+*  aus buffer in DB
+  IF NOT rebuild IS INITIAL.
+    CALL FUNCTION 'UKM_COMMITMENTS_UPD_GET_TABLES'
+      TABLES
+        et_item_new       = lt_item
+        et_totals_new     = lt_totals
+        et_totals_new_abs = lt_totals_abs
+        et_pm_balance_new = lt_pm_balance.
+
+*   change only those in gt_comm_typ.
+    if gt_comm_typ[] is not initial.
+      delete lt_totals where comm_typ not in s_comtyp.
+      delete lt_totals_abs where comm_typ not in s_comtyp.
+    endif.
+
+    CALL FUNCTION 'UKM_COMMITMENTS_UPDATE'
+      TABLES
+        it_item_new       = lt_item
+        it_totals_new     = lt_totals
+        it_totals_new_abs = lt_totals_abs
+        it_pm_balance_new = lt_pm_balance.
+
+  ENDIF.
+
+  IF NOT del_tot IS INITIAL OR NOT rebuild IS INITIAL.
+    CALL FUNCTION 'UKM_ENQUEUE_SET'
+      EXPORTING
+        i_partner_low  = gs_enq-partner_low
+        i_partner_high = gs_enq-partner_high
+        i_dequeue      = 'X'.
+  ENDIF.
+
+  IF NOT del_tot IS INITIAL OR NOT rebuild IS INITIAL
+   OR NOT del_item IS INITIAL.
+    COMMIT WORK.
+    CALL FUNCTION 'UKM_COMMTS_BUFFER_REFRESH'
+      EXPORTING
+        new_buffer = 'X'
+        old_buffer = 'X'.
+  ENDIF.
+*-display
+
+  LOOP AT gt_acc INTO gs_acc.
+* obligo des aktuellen partners
+    REFRESH: gt_totals, lt_display, gt_totals_source.
+*  Neue totals aufbauen
+    IF x_bupr <> space.
+      x_inferior = ' '.
+    ELSE.
+      x_inferior = 'X'.
+    ENDIF.
+*   with/without dependent accts
+    IF x_bupr <> space.
+      CALL FUNCTION 'UKM_COMMTS_READ'
+        EXPORTING
+          i_partner            = gs_acc-partner
+          i_segment            = gs_acc-credit_sgmnt
+          i_date               = p_date
+          i_inferior           = 'X'
+        TABLES
+          et_ukm_totals_source = gt_totals_source.
+    ELSE.
+      CALL FUNCTION 'UKM_COMMTS_READ'
+        EXPORTING
+          i_partner            = gs_acc-partner
+          i_segment            = gs_acc-credit_sgmnt
+          i_date               = p_date
+          i_inferior           = ' ' "?'X' "x_inferior
+        TABLES
+          et_ukm_totals_source = gt_totals_source. "wg meldesegmetn
+*<         et_ukm_totals = gt_totals.
+*<     gt_totals_source[] = gt_totals[].
+
+    ENDIF.
+*   apply further selections.
+    LOOP AT gt_totals_source INTO gs_totals_source.
+      IF NOT gs_totals_source-currency IN s_curr
+         OR NOT gs_totals_source-comm_typ IN s_comtyp.
+        DELETE gt_totals_source.
+      ENDIF.
+    ENDLOOP.
+
+*   umrubeln
+    CALL FUNCTION 'UKM_COMMTS_TOTALS_CALCULATE'
+      TABLES
+        it_totals_source  = gt_totals_source
+        et_totals_display = lt_display
+      EXCEPTIONS
+        OTHERS            = 0.
+    LOOP AT lt_display INTO ls_display.
+      MOVE-CORRESPONDING ls_display TO ls_totalsdisplay.
+*     get business partner data
+      AT NEW partner.
+*        CALL FUNCTION 'BUP_BUT000_SELECT_SINGLE'
+*          EXPORTING
+*            i_partner = ls_display-partner
+*          IMPORTING
+*            e_but000  = l_but000
+*          EXCEPTIONS
+*            not_found = 1.
+*        IF sy-subrc = 0.
+*          CONCATENATE l_but000-name_last
+*                      l_but000-name_org1
+*                      l_but000-name_grp1
+*                      INTO lname.
+*       condense lname.
+        CALL FUNCTION 'UKM_GET_DESCRIPTION_FOR_GPART'
+          EXPORTING
+            i_partner          = ls_display-partner
+          IMPORTING
+            e_description_name = lname.
+        IF NOT lname IS INITIAL.
+          ls_totalsdisplay-name_last = lname.
+        ELSE.
+          ls_totalsdisplay-name_last = text-014.
+
+        ENDIF.
+
+      ENDAT.
+*     get credit segment desciption.
+      AT NEW credit_sgmnt.
+        SELECT SINGLE credit_sgmnt_txt FROM ukmcred_sgm0t INTO
+                           ls_totalsdisplay-credit_sgmnt_txt
+        WHERE credit_sgmnt = ls_display-credit_sgmnt
+          AND   langu        = sy-langu.
+        IF sy-subrc <> 0.
+          ls_totalsdisplay-credit_sgmnt_txt = text-042.
+        ENDIF.
+      ENDAT.
+
+      APPEND ls_totalsdisplay TO gt_totalsdisplay.
+
+    ENDLOOP.
+
+  ENDLOOP.
+
+data gt_totalsdisplay1 like table of ls_totalsdisplay.
+  gt_totalsdisplay1[] = gt_totalsdisplay[].
+  EXPORT gt_totalsdisplay1 TO MEMORY ID 'ZFCREX'.
+*
+* display
+  gs_layout-f2code = '&ETA'.
+  gs_layout-f2code = 'ITEM_PICK'. "springe in item liste.
+
+  gs_layout-get_selinfos ='X'.
+
+if p_show is NOT INITIAL.
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+       EXPORTING
+            i_callback_program      = g_repid
+            i_callback_user_command  = g_formname_user_command
+            i_callback_pf_status_set = g_formname_pf_status
+*            i_callback_html_top_of_page = 'HTML_TOP_OF_PAGE'
+*            i_callback_html_end_of_list = 'HTML_END_OF_LIST'
+            i_callback_top_of_page = 'ALV_TOP_OF_PAGE'
+*              I_GRID_SETTINGS        = GS_GRID_SETTINGS
+*            i_structure_name        = 'UKM_S_TOTALS_DISPLAY'
+            is_layout               = gs_layout
+            it_fieldcat             = gt_fieldcat[]
+*           IT_EXCLUDING            =
+            it_special_groups       = gt_sp_group[]
+            it_sort                 = gt_sort[]
+*           IT_FILTER               =
+*           IS_SEL_HIDE             =
+*           i_default               = g_default
+            i_save                  = g_save
+            is_variant              = g_variant
+            it_events               = gt_events[]
+*           IT_EVENT_EXIT           =
+            is_print                = gs_print
+*           I_SCREEN_START_COLUMN   = 0
+*           I_SCREEN_START_LINE     = 0
+*           I_SCREEN_END_COLUMN     = 0
+*           I_SCREEN_END_LINE       = 0
+*      IMPORTING
+*           E_EXIT_CAUSED_BY_CALLER =
+       TABLES
+            t_outtab                = gt_totalsdisplay.
+endif.
+*---------------------------------------------------------------------
+FORM set_get_params USING imode.
+  CASE imode.
+    WHEN 'GET'.
+      GET PARAMETER ID 'BPA' FIELD s_partnr-low.
+      IF sy-subrc = 0 AND NOT s_partnr-low IS INITIAL.
+        s_partnr-sign = 'I'.
+        s_partnr-option = 'EQ'.
+        APPEND s_partnr.
+      ENDIF.
+      GET PARAMETER ID 'UKM_SEGMENT' FIELD s_segmt-low.
+      IF sy-subrc = 0 AND NOT s_segmt-low IS INITIAL.
+        s_segmt-sign = 'I'.
+        s_segmt-option = 'EQ'.
+        APPEND s_segmt.
+      ENDIF.
+
+    WHEN 'SET'.
+      READ TABLE s_partnr INDEX 1.
+      IF sy-subrc = 0 AND s_partnr-sign = 'I' AND s_partnr-option = 'EQ'
+          AND NOT s_partnr-low IS INITIAL.
+        SET PARAMETER ID 'BPA' FIELD s_partnr-low.
+      ENDIF.
+      READ TABLE s_segmt INDEX 1.
+      IF sy-subrc = 0 AND s_segmt-sign = 'I' AND s_segmt-option = 'EQ'
+          AND NOT s_segmt-low IS INITIAL.
+        SET PARAMETER ID 'UKM_SEGMENT' FIELD s_segmt-low.
+      ENDIF.
+
+  ENDCASE.
+ENDFORM.                    "set_get_params
+
+
+*&--------------------------------------------------------------------*
+*&      Form  alv_f4_for_variant
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+FORM alv_f4_for_variant.
+*
+  CALL FUNCTION 'REUSE_ALV_VARIANT_F4'
+       EXPORTING
+            is_variant          = g_variant
+            i_save              = g_save
+            i_display_via_grid  = 'X'
+*           it_default_fieldcat =
+       IMPORTING
+            e_exit              = g_exit
+            es_variant          = gx_variant
+       EXCEPTIONS
+            not_found = 2.
+  IF sy-subrc = 2.
+    MESSAGE ID sy-msgid TYPE 'S'      NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    IF g_exit = space.
+      p_vari = gx_variant-variant.
+    ENDIF.
+  ENDIF.
+ENDFORM.                    "ALV_F4_FOR_VARIANT
+*&--------------------------------------------------------------------*
+*&      Form  alv_E01_FIELDCAT_INIT
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->E01_LT_FIELtext
+*---------------------------------------------------------------------*
+FORM alv_e01_fieldcat_init USING e01_lt_fieldcat
+                              TYPE slis_t_fieldcat_alv.     "#EC CALLED
+  DATA: ls_fieldcat TYPE slis_fieldcat_alv.
+ENDFORM.                    "alv_E01_FIELDCAT_INIT
+*&--------------------------------------------------------------------*
+*&      Form  alv_E03_EVENTTAB_BUILD
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->E03_LT_EVENtext
+*---------------------------------------------------------------------*
+FORM alv_e03_eventtab_build USING e03_lt_events
+                                 TYPE slis_t_event.         "#EC CALLED
+
+  DATA: ls_event TYPE slis_alv_event.
+*
+  CALL FUNCTION 'REUSE_ALV_EVENTS_GET'
+    EXPORTING
+      i_list_type = 0
+    IMPORTING
+      et_events   = e03_lt_events.
+  READ TABLE e03_lt_events WITH KEY name =  slis_ev_end_of_list
+                           INTO ls_event.
+  IF sy-subrc = 0.
+    MOVE 'ALV_END_OF_LIST' TO ls_event-form.
+    APPEND ls_event TO e03_lt_events.
+  ENDIF.
+ENDFORM.                    "alv_E03_EVENTTAB_BUILD
+*&--------------------------------------------------------------------*
+*&      Form  alv_end_of_list
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+FORM alv_end_of_list.                                       "#EC CALLED
+
+ENDFORM.                    "ALV_END_OF_LIST
+
+*---------------------------------------------------------------------*
+*       FORM E04_COMMENT_BUILD                                        *
+*---------------------------------------------------------------------*
+FORM alv_e04_comment_build USING e04_lt_top_of_page
+                             TYPE slis_t_listheader.        "#EC CALLED
+  DATA: ls_line TYPE slis_listheader.
+  DATA: ldate(10).
+*
+* Listenüberschrift: Typ H
+  CLEAR ls_line.
+  ls_line-typ  = 'H'.
+* LS_LINE-KEY:  not used for this type
+  ls_line-info = text-001.
+  IF NOT p_date IS INITIAL.
+    ls_line-info = text-002.
+    WRITE p_date TO ldate.
+    REPLACE '&1' IN ls_line-info WITH ldate.
+  ENDIF.
+  APPEND ls_line TO e04_lt_top_of_page.
+* Kopfinfo: Typ S
+  CLEAR ls_line.
+  ls_line-typ  = 'S'.
+  ls_line-key  = text-050.
+* ls_line-info = text-010.
+*  APPEND ls_line TO e04_lt_top_of_page.
+ENDFORM.                    "alv_E04_COMMENT_BUILD
+*---------------------------------------------------------------------*
+*       FORM E08_COMMENT_BUILD                                        *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  E04_LT_TOP_OF_PAGE                                            *
+*---------------------------------------------------------------------*
+FORM alv_e08_comment_build USING e04_lt_top_of_page
+                              TYPE slis_t_listheader.       "#EC CALLED
+  DATA: ls_line TYPE slis_listheader.
+*
+* Listenüberschrift: Typ H
+  CLEAR ls_line.
+  ls_line-typ  = 'H'.
+* LS_LINE-KEY:  not used for this type
+  ls_line-info = text-006.
+  APPEND ls_line TO e04_lt_top_of_page.
+* Kopfinfo: Typ S
+  CLEAR ls_line.
+  ls_line-typ  = 'S'.
+  ls_line-key  = text-006.
+  ls_line-info = text-006.
+  APPEND ls_line TO e04_lt_top_of_page.
+ENDFORM.                    "ALV_E08_COMMENT_BUILD
+*---------------------------------------------------------------------*
+*       FORM E09_COMMENT_BUILD                                        *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  E04_LT_TOP_OF_PAGE                                            *
+*---------------------------------------------------------------------*
+FORM alv_e09_comment_build USING e04_lt_top_of_page
+                                TYPE slis_t_listheader.     "#EC CALLED
+  DATA: ls_line TYPE slis_listheader.
+  DATA: ldate(10).
+*
+* Listenüberschrift: Typ H
+  CLEAR ls_line.
+  REFRESH e04_lt_top_of_page.
+  ls_line-typ  = 'H'.
+* LS_LINE-KEY:  not used for this type
+  IF g_variant-handle = '0002'.
+    ls_line-info = text-100.
+    IF NOT p_date IS INITIAL.
+      ls_line-info = text-105.
+      WRITE p_date TO ldate.
+      REPLACE '&1' IN ls_line-info WITH ldate.
+    ENDIF.
+  ELSEIF g_variant-handle = '0003'.
+    ls_line-info = text-101.
+  ENDIF.
+  APPEND ls_line TO e04_lt_top_of_page.
+* Kopfinfo: Typ S
+*  CLEAR ls_line.
+*  ls_line-typ  = 'S'.
+*  ls_line-key  = 'Obligo Infos'(006).
+*  ls_line-info = text-006.
+*  APPEND ls_line TO e04_lt_top_of_page.
+ENDFORM.                    "alv_E09_COMMENT_BUILD
+*---------------------------------------------------------------------*
+*       FORM E05_LAYOUT_BUILD                                         *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  <->  E05_LS_LAYOUT                                                 *
+*---------------------------------------------------------------------*
+FORM alv_e05_layout_build USING e05_ls_layout
+                                 TYPE slis_layout_alv.      "#EC CALLED
+*  E05_LS_LAYOUT-F2CODE            = P_F2CODE.
+*  E05_LS_LAYOUT-CELL_MERGE        = P_MERGE.
+*  E05_LS_LAYOUT-COLWIDTH_OPTIMIZE = P_COLOPT.
+*  E05_LS_LAYOUT-NO_VLINE          = P_NOVLIN.
+*  E05_LS_LAYOUT-NO_COLHEAD        = P_NOCOLH.
+*  IF P_BOX = 'X'.
+*    E05_LS_LAYOUT-BOX_FIELDNAME = G_BOXNAM.
+*  ELSE.
+*    CLEAR E05_LS_LAYOUT-BOX_FIELDNAME.
+*  ENDIF.
+*  IF P_LIGHTS = 'X' OR P_LIGHTC = 'X'.
+*    E05_LS_LAYOUT-LIGHTS_FIELDNAME = P_LIGNAM.
+*  ELSE.
+*    CLEAR E05_LS_LAYOUT-LIGHTS_FIELDNAME.
+*  ENDIF.
+*  IF P_BEFORE = 'X'.
+*    E05_LS_LAYOUT-TOTALS_BEFORE_ITEMS = 'X'.
+*  ENDIF.
+*  E05_LS_LAYOUT-LIGHTS_CONDENSE = P_LIGHTC.
+*  E05_LS_LAYOUT-TOTALS_TEXT       = P_TOTEXT.
+*  E05_LS_LAYOUT-SUBTOTALS_TEXT    = P_STTEXT.
+*  E05_LS_LAYOUT-TOTALS_ONLY       = P_TOTONL.
+  e05_ls_layout-detail_popup      = 'X'. "P_DETPOP.
+  e05_ls_layout-group_buttons     = 'X'. "P_GROUPB.
+ENDFORM.                    "alv_E05_LAYOUT_BUILD
+*---------------------------------------------------------------------*
+*       FORM E06_T_SORT_BUILD                                         *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  E06_LT_SORT                                                   *
+*---------------------------------------------------------------------*
+FORM alv_e06_t_sort_build USING e06_lt_sort
+                              TYPE slis_t_sortinfo_alv.     "#EC CALLED
+*  DATA: LS_SORT TYPE SLIS_SORTINFO_ALV.
+**
+*  LS_SORT-FIELDNAME = 'feldname'.
+*  LS_SORT-SPOS      = 1.
+*  LS_SORT-UP        = 'X'.
+*  LS_SORT-SUBTOT    = 'X'.
+*  APPEND LS_SORT TO E06_LT_SORT.
+ENDFORM.                    "alv_E06_T_SORT_BUILD
+*---------------------------------------------------------------------*
+*       FORM E07_SP_GROUP_BUILD                                       *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  E07_LT_SP_GROUP                                               *
+*---------------------------------------------------------------------*
+FORM alv_e07_sp_group_build USING e07_lt_sp_group
+                                TYPE slis_t_sp_group_alv.   "#EC CALLED
+  DATA: ls_sp_group TYPE slis_sp_group_alv.
+
+ENDFORM.                    "alv_E07_SP_GROUP_BUILD
+*---------------------------------------------------------------------*
+*       FORM E08_PRINT_BUILD                                          *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  E08_LS_PRINT                                                  *
+*---------------------------------------------------------------------*
+FORM alv_e08_print_build USING e08_ls_print TYPE slis_print_alv.
+                                                            "#EC CALLED
+*
+*  E08_LS_PRINT-PRINT              = P_PRINT.
+ENDFORM.                    "alv_E08_PRINT_BUILD
+
+*&--------------------------------------------------------------------*
+*&      Form  PF_STATUS_SET
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->RT_EXTAB   text
+*---------------------------------------------------------------------*
+FORM alv_pf_status_set USING rt_extab TYPE slis_t_extab.    "#EC CALLED
+  DATA: l_status LIKE sy-pfkey VALUE 'STANDARD'.
+* EXCLUDING FCODES GIVEN BY ABAP LISTVIEWER *
+  IF x_bupr IS INITIAL.
+    APPEND 'ITEM' TO rt_extab.
+  ENDIF.
+  SET PF-STATUS l_status EXCLUDING rt_extab.
+  g_variant-handle = '0001'.
+ENDFORM.                    "PF_STATUS_SET
+"
+*---------------------------------------------------------------------*
+*       FORM PF_STATUS_SETA                                           *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  RT_EXTAB                                                      *
+*---------------------------------------------------------------------*
+FORM alv_pf_status_seta USING rt_extab TYPE slis_t_extab.   "#EC CALLED
+  DATA: l_status LIKE sy-pfkey VALUE 'STANDARDA'.
+* EXCLUDING FCODES GIVEN BY ABAP LISTVIEWER *
+  SET PF-STATUS l_status EXCLUDING rt_extab.
+ENDFORM.                    "PF_STATUS_SETA
+
+*&--------------------------------------------------------------------*
+*&      Form  ALV_USER_COMMANDA
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->RF_UCOMM   text
+*      -->RS_SELFIELDtext
+*---------------------------------------------------------------------*
+FORM alv_user_commanda USING rf_ucomm    LIKE sy-ucomm
+                        rs_selfield TYPE slis_selfield.     "#EC CALLED
+*
+  CASE rf_ucomm.
+    WHEN 'ITEM'.
+      PERFORM user_command_itema USING rf_ucomm rs_selfield.
+
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.                    "ALV_USER_COMMANDA
+
+*&--------------------------------------------------------------------*
+*&      Form  AlV_top_of_page
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+FORM alv_top_of_page.                                       "#EC CALLED
+*
+  CALL FUNCTION 'REUSE_ALV_COMMENTARY_WRITE'
+    EXPORTING
+      it_list_commentary = gt_list_top_of_page.
+ENDFORM.                    "TOP_OF_PAGE
+
+*&--------------------------------------------------------------------*
+*&      Form  TOP_OF_PAGEA
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+FORM alv_top_of_pagea.                                      "#EC CALLED
+*
+  CALL FUNCTION 'REUSE_ALV_COMMENTARY_WRITE'
+    EXPORTING
+      it_list_commentary = gt_list_top_of_pagea.
+ENDFORM.                    "TOP_OF_PAGEA
+
+*&--------------------------------------------------------------------*
+*&      Form  ALV_USER_COMMAND
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->RF_UCOMM   text
+*      -->RS_SELFIELDtext
+*---------------------------------------------------------------------*
+FORM alv_user_command USING rf_ucomm    LIKE sy-ucomm
+                        rs_selfield TYPE slis_selfield.     "#EC CALLED
+  STATICS: l_i TYPE i.
+  STATICS: lt_fieldcat TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+  CASE rf_ucomm.
+    WHEN 'EXIT'.
+      rs_selfield-exit = 'X'.
+    WHEN 'ITEM'.
+      PERFORM user_command_item USING rs_selfield.
+    WHEN 'ITEM_PICK'.
+      PERFORM user_command_item_pick USING rs_selfield.
+    WHEN 'DATE'.
+      PERFORM user_command_date USING rs_selfield.
+    WHEN 'PM'.
+      PERFORM user_command_pm USING rs_selfield.
+      g_variant-handle = '0003'.
+      PERFORM alv_e09_comment_build  USING gt_list_top_of_pagea[].
+      CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+        EXPORTING
+          i_callback_program       = g_repid
+          i_callback_user_command  = g_formname_user_commanda
+          i_callback_pf_status_set = g_formname_pf_statusa
+          i_callback_top_of_page   = 'ALV_TOP_OF_PAGEA'
+          i_structure_name         = 'UKM_PM_BALANCE'
+          is_layout                = gs_layout
+          i_save                   = g_save
+          is_variant               = g_variant
+          it_events                = gt_events[]
+          is_print                 = gs_print
+        TABLES
+          t_outtab                 = alv_pm_balance.
+
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.                    "ALV_USER_COMMAND
+
+
+*&--------------------------------------------------------------------*
+*&      Form  user_command_item
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_UCOMM    text
+*      -->I_SELFIELD text
+*---------------------------------------------------------------------*
+*FORM user_command_item_old
+*                  USING i_ucomm     LIKE sy-ucomm
+*                        i_selfield TYPE slis_selfield.      "#EC CALLED
+*  DATA: lt_ext_guid TYPE SORTED TABLE OF ukm_ext_guid WITH HEADER LINE
+*           WITH UNIQUE KEY  guid.
+*  STATICS: l_i TYPE i.
+*  STATICS: lt_fieldcat TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+*
+**determine the current line
+*  READ TABLE gt_totalsdisplay INTO ls_totalsdisplay
+*             INDEX   i_selfield-tabindex.
+*  IF sy-subrc = 0.
+** use the original partner !
+** Alle details
+*    CALL FUNCTION 'UKM_ITEMS_READ'
+*      EXPORTING
+*        i_partner           = ls_totalsdisplay-msg_partner
+*        i_segment           = ls_totalsdisplay-credit_sgmnt
+*        i_inferior          = ' '
+*      TABLES
+*        et_ukm_item_display = alv_item.
+*  ELSE.
+**    MESSAGE e315(ukm_comm).
+*    MESSAGE e035(0k).
+*  ENDIF.
+*  g_variant-handle = '0002'.
+*  PERFORM alv_e09_comment_build  USING gt_list_top_of_pagea[].
+**     set the field catalogue
+*  IF lt_fieldcat IS INITIAL.
+*    PERFORM alv_merge_fieldcat_item TABLES lt_fieldcat.
+*  ENDIF.
+*
+*  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+*  EXPORTING
+*       i_callback_program      = g_repid
+*       i_callback_user_command  = g_formname_user_commanda
+*       i_callback_pf_status_set = g_formname_pf_statusa
+*       i_callback_top_of_page = 'ALV_TOP_OF_PAGEA'
+*       is_layout               = gs_layout
+*        it_fieldcat             = lt_fieldcat[]
+*       i_save                  = g_save
+*       is_variant              = g_variant
+*       it_events               = gt_events[]
+*       is_print                = gs_print
+*  TABLES
+*       t_outtab                = alv_item.
+*
+*ENDFORM.                    "user_command_item
+*&--------------------------------------------------------------------*
+*&      Form  user_command_item
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_UCOMM    text
+*      -->I_SELFIELD text
+*---------------------------------------------------------------------*
+FORM user_command_item USING
+                        i_selfield TYPE slis_selfield.      "#EC CALLED
+
+  RANGES: lr_partnr FOR ls_totalsdisplay-partner.
+
+  lr_partnr[] = s_partnr[].
+
+*determine the current line
+  READ TABLE gt_totalsdisplay INTO ls_totalsdisplay
+             INDEX   i_selfield-tabindex.
+  IF sy-subrc <> 0.
+    IF i_selfield-tabindex = 0 AND
+    i_selfield-sumindex <> 0.
+      IF i_selfield-sel_tab_field CS 'PARTNER'.
+        REFRESH lr_partnr.
+        lr_partnr-low = i_selfield-value.
+        lr_partnr-sign = 'I'.
+        lr_partnr-option = 'EQ'.
+        APPEND lr_partnr.
+      ELSE.
+        MESSAGE e039(0k).
+      ENDIF.
+    ENDIF.
+  ELSE.
+    REFRESH lr_partnr.
+    lr_partnr-low = ls_totalsdisplay-partner.
+    lr_partnr-sign = 'I'.
+    lr_partnr-option = 'EQ'.
+    APPEND lr_partnr.
+  ENDIF.
+
+
+  SUBMIT ukm_item_display
+         WITH s_partnr IN lr_partnr
+         WITH s_segmt  IN s_segmt
+         WITH s_comtyp IN s_comtyp
+         WITH s_curr   IN s_curr
+         WITH p_date   = p_date
+         AND RETURN.
+
+ENDFORM.                    "user_command_item
+
+*&--------------------------------------------------------------------*
+*&      Form  user_command_item_pick
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_UCOMM    text
+*      -->I_SELFIELD text
+*---------------------------------------------------------------------*
+FORM user_command_item_pick USING
+                         i_selfield TYPE slis_selfield.     "#EC CALLED
+
+*determine the current line
+  READ TABLE gt_totalsdisplay INTO ls_totalsdisplay
+             INDEX   i_selfield-tabindex.
+*show the originating items (use message partner and
+*                                message segment
+  IF sy-subrc = 0.
+    SUBMIT ukm_item_display                                 "#EC *
+           WITH s_partnr = ls_totalsdisplay-msg_partner     "#EC *)
+           WITH s_segmt  = ls_totalsdisplay-msg_sgmnt       "#EC *)
+           WITH s_comtyp = ls_totalsdisplay-comm_typ        "#EC *)
+           WITH s_curr   = ls_totalsdisplay-currency        "#EC *)
+           WITH p_date   = p_date                           "#EC *
+           AND RETURN.                                      "#EC *
+
+  ELSE.
+*    MESSAGE e315(ukm_comm).
+    MESSAGE e039(0k).
+  ENDIF.
+ENDFORM.                    "user_command_item
+
+*&--------------------------------------------------------------------*
+*&      Form  user_command_date
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_UCOMM    text
+*      -->I_SELFIELD text
+*---------------------------------------------------------------------*
+FORM user_command_date USING
+                        i_selfield TYPE slis_selfield.      "#EC CALLED
+* call the report again - without return with a target date
+
+  CALL SELECTION-SCREEN '0900' STARTING AT 10 10.
+
+  SUBMIT ukm_commts_delete
+*             USING SELECTION-SCREEN 0900
+*             via selection-screen
+         WITH s_partnr IN s_partnr                          "#EC *
+         WITH s_segmt  IN s_segmt                           "#EC *
+         WITH s_comtyp IN s_comtyp                          "#EC *
+         WITH s_curr   IN s_curr                            "#EC *
+         WITH x_err  = x_err
+         WITH x_pend = x_pend
+         WITH p_vari = p_vari
+         WITH ps_date = ps_date
+         WITH x_bupr = x_bupr.
+*
+*            with p_date   = p_date
+*            and return.
+ENDFORM.                    "user_command_date
+*&--------------------------------------------------------------------*
+*&      Form  user_command_pm
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_UCOMM    text
+*      -->I_SELFIELD text
+*---------------------------------------------------------------------*
+FORM user_command_pm USING
+                        i_selfield TYPE slis_selfield.      "#EC CALLED
+  REFRESH alv_pm_balance.
+*determine the current line
+  READ TABLE gt_totalsdisplay INTO ls_totalsdisplay
+             INDEX   i_selfield-tabindex.
+  IF sy-subrc = 0.
+* use the original partner !
+* Alle partner messages
+*    SELECT DISTINCT * FROM ukm_pm_balance
+    SELECT * FROM ukm_pm_balance
+               APPENDING CORRESPONDING FIELDS OF TABLE alv_pm_balance
+               WHERE partner = ls_totalsdisplay-msg_partner.
+*                 AND credit_sgmnt ls_totalsdisplay-credit_sgmnt
+
+  ELSE.
+*    MESSAGE e315(ukm_comm).
+    MESSAGE e039(0k).
+  ENDIF.
+ENDFORM.                    "user_command_item
+
+*&--------------------------------------------------------------------*
+*&      Form  user_command_itema
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_UCOMM    text
+*      -->I_SELFIELD text
+*---------------------------------------------------------------------*
+FORM user_command_itema
+                  USING i_ucomm     LIKE sy-ucomm
+                        i_selfield TYPE slis_selfield.      "#EC CALLED
+*  DATA: lt_ext_guid TYPE SORTED TABLE OF ukm_ext_guid WITH HEADER LINE
+*           WITH UNIQUE KEY  guid.
+  DATA ls_itemv LIKE v_ukm_item.
+
+*determine the current line
+  READ TABLE alv_item INTO ls_itemv
+             INDEX   i_selfield-tabindex.
+* use the original partner !
+  IF sy-subrc = 0.
+    PERFORM fb03 USING ls_itemv.
+
+  ELSE.
+*    MESSAGE e315(ukm_comm).
+    MESSAGE e035(0k).
+  ENDIF.
+ENDFORM.                    "user_command_item
+
+*&--------------------------------------------------------------------*
+*&      Form  set_main_segment
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+FORM set_main_segment.
+  CALL FUNCTION 'UKM_COMMTS_SET_MAIN_SEGMENT'
+    IMPORTING
+      e_main_segment = g_main_segment.
+ENDFORM.                    "set_main_segment
+
+
+*&--------------------------------------------------------------------*
+*&      Form  fb03
+*&--------------------------------------------------------------------*
+*       text
+*---------------------------------------------------------------------*
+*      -->I_ITEM     text
+*---------------------------------------------------------------------*
+FORM fb03 USING i_item STRUCTURE v_ukm_item.
+*  DATA: oref TYPE REF TO cx_root.
+
+*  TRY.
+*
+*
+*      CALL FUNCTION 'BAPI_ACC_DOCUMENT_DISPLAY'
+*        DESTINATION 'QE9003' "i_item-logsys
+*        EXPORTING
+*           obj_type = 'BSEG'
+*           obj_key  = i_item-objkey
+*           obj_sys  = i_item-logsys.
+*
+*    CATCH cx_sy_dyn_call_illegal_func INTO oref.
+** nicht da
+*  ENDTRY.
+*
+ENDFORM.                                                    "fb03
+*&---------------------------------------------------------------------*
+*&      Form  alv_set_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM alv_set_fieldcat .
+  DATA: lrepid LIKE sy-repid.
+  DATA: lname TYPE slis_tabname VALUE 'LS_TOTALSDISPLAY'.
+
+  lrepid = sy-repid.
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_program_name               = lrepid
+      i_internal_tabname           = lname
+      I_STRUCTURE_NAME             = space
+      i_client_never_display       = 'X'
+      i_inclname                   = lrepid
+      i_bypassing_buffer           = 'X'
+      I_BUFFER_ACTIVE              = space
+    CHANGING
+      ct_fieldcat                  = gt_fieldcat
+*   EXCEPTIONS
+*     INCONSISTENT_INTERFACE       = 1
+*     PROGRAM_ERROR                = 2
+*     OTHERS                       = 3
+            .
+*  IF sy-subrc <> 0.
+** MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+**         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+*  ENDIF.
+
+ENDFORM.                    " alv_set_fieldcat
+*&---------------------------------------------------------------------*
+*&      Form  merge_fieldcat
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_LT_FIELDCAT  text
+*----------------------------------------------------------------------*
+FORM alv_merge_fieldcat_item
+  TABLES it_fieldcat TYPE slis_t_fieldcat_alv.              "#EC CALLED
+  REFRESH it_fieldcat.
+  DATA: lt_fieldcat TYPE slis_t_fieldcat_alv.
+  DATA: l_structure TYPE dd02l-tabname VALUE 'V_UKM_ITEM'.
+  DATA: l_repid LIKE sy-repid.
+  l_repid = sy-repid.
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+   i_program_name               = l_repid
+*   I_INTERNAL_TABNAME           = 'ALV_ITEM'
+     i_structure_name             = l_structure
+*   I_CLIENT_NEVER_DISPLAY       = 'X'
+*   I_INCLNAME                   =
+   i_bypassing_buffer           = 'X'
+*    I_BUFFER_ACTIVE              = ' '
+    CHANGING
+      ct_fieldcat                  = lt_fieldcat.
+* EXCEPTIONS
+*   INCONSISTENT_INTERFACE       = 1
+*   PROGRAM_ERROR                = 2
+*   OTHERS                       = 3
+  LOOP AT lt_fieldcat INTO it_fieldcat.
+    IF it_fieldcat-fieldname <> 'CLIENT' AND
+       it_fieldcat-fieldname <> 'PARTNER' AND
+       it_fieldcat-fieldname <> 'CREDIT_SGMNT' AND
+       it_fieldcat-fieldname <> 'IGUID'.
+      CLEAR it_fieldcat-key.
+    ENDIF.
+    APPEND it_fieldcat.
+  ENDLOOP.
+
+
+ENDFORM.                    " merge_fieldcat
