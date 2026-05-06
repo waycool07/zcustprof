@@ -1,0 +1,2187 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZN_FSCM_CUST_OVRVW_NEW_F01_DP
+*&---------------------------------------------------------------------*
+
+************************************************************************
+* PROGRAM     : ZN_FSCM_CUST_OVRVW_F01                                 *
+* TITLE       : Placed credit rep group on Sales Order Header          *
+* AUTHOR      : Reecha Kayal                                           *
+* DATE CREATED: 04/25/2008                                             *
+* SAP RELEASE : ERP 6.2                                                *
+* DESCRIPTION : This report is required so that the user is able to    *
+*               make a more informed credit decision in releasing an   *
+*               order/delivery from credit block.                      *
+*______________________________________________________________________*
+* RICE ID     : EFI0010                                                *
+* Tech Design : Placed credit rep group on Sales Order Header          *
+* SAP Request#: D11K908413                                             *
+*______________________________________________________________________*
+* PROGRAM TYPE: Executable                                             *
+* PACKAGE     : Z_FIN_FSCM                                             *
+* TRANSACTION : ZCR0                                                   *
+* LOGICAL dB  : NA                                                     *
+* GUI STATUS..: NA                                                     *
+*______________________________________________________________________*
+**--------------------------CHANGE HISTORY----------------------------**
+* CHANGE #    : CHG001                                                 *
+* DATE        : 05/25/2008                                             *
+* AUTHOR      : Reecha Kayal                                           *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ECC 6.0                                                *
+* SAP Request#: D11K908413                                             *
+* DESCRIPTION : 1.Customer Account Hierarchy changes done              *
+*______________________________________________________________________*
+**--------------------------CHANGE HISTORY----------------------------**
+* CHANGE #    : CHG002                                                 *
+* DATE        : 06/19/2008                                             *
+* AUTHOR      : Reecha Kayal                                           *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ECC 6.0                                                *
+* SAP Request#: D11K908413                                             *
+* DESCRIPTION : 1.Button added for call transaction UKM_BP             *
+*______________________________________________________________________*
+* CHANGE #    : CHG003                                                 *
+* DATE        : 01/15/2009                                             9
+* AUTHOR      : Suman Adhikari                                         *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ECC 6.0                                                *
+* SAP Request#:  D11K916440 /D11K916537                                *
+* DESCRIPTION :  Change in the Fiscal Year/Current Month logic   and   *
+*  Change the desc of "H/C Last 12 Mo's" to “H/C Sales Last 12 Mo's”.  *
+*  and populating the last 12 months highest Sales Value in the Field. *
+*______________________________________________________________________*
+*======================================================================*
+* CHANGE #    : CHG004                                                 *
+* DATE        : 02/03/2009                                             *
+* AUTHOR      : Suman Adhikari                                         *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ECC 6.0                                                *
+* SAP Request#:         D11K916758                                     *
+* DESCRIPTION : Commenting the Message if data not found in KNC1 for   *
+*                Customer ,fiscal Year and company Code at line 773/774*
+*______________________________________________________________________*
+*======================================================================*
+* CHANGE #    : SA101                                                  *
+* DATE        : 03/09/2009                                             *
+* AUTHOR      : Suman Adhikari                                         *
+* SCR/FCD/TPR#: NA                                                     *
+* SAP Release : ECC 6.0                                                *
+* SAP Request#:     D11K917783                                         *
+* DESCRIPTION : Correcting the Logic for calculating Hold Amt.         *
+* Now we are taking the on hold delivery amount for On Hold calculation*
+* In sub_get_hold perform                                              *
+*______________________________________________________________________*
+* CHANGE #    : AB001                                                  *
+* DATE        : 05/19/2009                                             *
+* AUTHOR      : Amod Bhide                                             *
+* SAP Request#: D11K919270                                             *
+* DESCRIPTION : Change logic to calculate the credit exposure for      *
+*               customer. Fetch the values of actual open orders and   *
+*               open deliveries from SD and calculate the commitments  *
+*               for the customer                                       *
+*______________________________________________________________________*
+*======================================================================*
+* CHANGE #    : SA102                                                  *
+* DATE        : 07/13/2009                                             *
+* AUTHOR      : Suman Adhikari                                         *
+* SAP Request#:     D11K920057                                         *
+* DESCRIPTION : Performance Tunning fir "On-Hold" Amount calculations  *
+*               Now we are using Logical Data-Base Concept like ZZVKM1 *
+*               for fetching the "On-Hold" Amount.                     *
+*______________________________________________________________________*
+************************************************************************
+* CHANGE #    : RN001                                                  *
+* DATE        : 12/03/2009                                             *
+* AUTHOR      : Rohit Reddy Nallu                                      *
+* SAP Request#: D11K923038                                             *
+* DESCRIPTION : Correct the Logic to Print ADA Correctly               *
+************************************************************************
+
+************************************************************************
+* CHANGE #    : GS001                                                  *
+* DATE        : 12/17/2009                                             *
+* AUTHOR      : Garima Sharma                                      *
+* SAP Request#: D11K923264                                             *
+* DESCRIPTION : Changes for Open Delivery value               *
+************************************************************************
+************************************************************************
+* CHANGE #    : GS002                                                     *
+* DATE        : 04/26/2010                                                *
+* AUTHOR      : Garima Sharma                                             *
+* SAP Request#: D11K925405 and D11K925469
+* Req Desc    : IN34875 : ZCUSTPROF                                       *
+* DESCRIPTION : fetching wrong value in the H/C for last 12 months. The   *
+*               tcode takes the highest value for only the current fiscal *
+*               instead it should consider last fiscal year as well.      *
+************************************************************************
+* CHANGE #    : PC001                                                  *
+* DATE        : 05/29/2014                                             *
+* AUTHOR      : Pukkela Chiranjeevi                                    *
+* SAP Request#: D25K933908                                             *
+* DESCRIPTION : screen navigation fixes                                *
+************************************************************************
+
+* CHANGE HISTORY-------------------------------------------------------*
+* CHANGE NO          : PAS01                                           *
+* REFERENCE NO       : PR10024002                                      *
+* DEVELOPER          : Priyanka Shinde                                 *
+* DATE               : 02-01-2019                                      *
+* TRANSPORT NUMBER(S): D25K984427                                      *
+* DESCRIPTION        : Add condition while getting previous month if   *
+*                      current month is January when calculating       *
+*                      'Average Days in Arrears'.                      *
+*----------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_clear_fields
+*&---------------------------------------------------------------------*
+* Clear and Refresh work areas, internal tables.
+*----------------------------------------------------------------------*
+FORM sub_clear_fields.
+
+  CLEAR: wa_but000, wa_ukm_sgm, wa_ukm_cms, wa_vbak, wa_vbuk, wa_vbap,
+  wa_but050, wa_bsid, wa_risktxt, wa_details, wa_layout, wa_fcat,
+  wa_event, g_arbal, g_openamt, g_totexp, g_onhold, g_hiacc, g_crdtsgm,
+  g_ytdsls, g_lysls, g_arrdays.
+
+  REFRESH: g_rpartner, g_rvbeln, gt_but050, gt_vbak, gt_vbuk,
+  gt_vbap, gt_bsid, gt_fcat, gt_details, gt_events.
+
+ENDFORM.                    "sub_clear_fields
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_crdtsgm
+*&---------------------------------------------------------------------*
+*  Subroutine to retrieve credit segment from Assignment of Credit
+*  Control Area to Credit Segment (UKM_KKBER2SGM) table.
+*----------------------------------------------------------------------*
+FORM sub_get_crdtsgm.
+
+* If no value for Credit control area is passed default it to 'CC04'.
+  IF p_kkber IS INITIAL.
+    p_kkber = gc_cc04.
+  ENDIF.
+
+  SELECT SINGLE credit_sgmnt  "Credit Segment
+  INTO g_crdtsgm
+  FROM ukm_kkber2sgm  "Assignment of Credit Control Area to Credit Segment
+  WHERE kkber = p_kkber.
+* Sy-subrc chack does not effect further processing hence not required.
+
+ENDFORM.                    "sub_get_crdtsgm
+
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_hiacc
+*&---------------------------------------------------------------------*
+*    Get highest level credit account
+*----------------------------------------------------------------------*
+FORM sub_get_hiacc.
+
+  DATA: lt_but050 TYPE STANDARD TABLE OF gx_but050 INITIAL SIZE 0,
+        wa_but050l TYPE gx_but050.
+
+  SELECT relnr      "BP Relationship Number
+         partner1   "Business Partner Number
+         partner2   "Business Partner Number
+         date_to    "Validity Date (Valid To)
+  INTO TABLE gt_but050
+  FROM but050    "BP relationships/role definitions: General data
+  WHERE partner1 IN g_rpartner
+  AND reltyp = gc_ukm001
+  AND dftval = g_crdtsgm.
+
+  IF sy-subrc NE 0.                                         "RK09140
+    g_hiacc = p_prtnr.                                      "RK09140
+  ELSE.                                                     "RK09140
+
+    CLEAR wa_but050.
+* Get the highest level credit account.
+    READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                               partner2 = p_prtnr.
+    IF sy-subrc = 0.
+      READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                      partner2 = wa_but050-partner1.
+      IF sy-subrc EQ 0.
+* Begin of CHG001-
+*        wa_partner-sign = gc_sign.
+*        wa_partner-option = gc_option.
+*        wa_partner-low = wa_but050-partner2.
+*        APPEND wa_partner TO g_rpartner.
+*        CLEAR wa_partner.
+*end of CHG001-
+        READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                          partner2 = wa_but050-partner1.
+      ENDIF.
+* Begin of CHG001-
+*      wa_partner-sign = gc_sign.
+*      wa_partner-option = gc_option.
+*      wa_partner-low = wa_but050-partner1.
+*      APPEND wa_partner TO g_rpartner.
+*      CLEAR wa_partner.
+* End of CHG001-
+      g_hiacc = wa_but050-partner1.
+    ELSE.
+* Begin of CHG001-
+*      wa_partner-sign = gc_sign.
+*      wa_partner-option = gc_option.
+*      wa_partner-low = p_prtnr.
+*      APPEND wa_partner TO g_rpartner.
+*      CLEAR wa_partner.
+* End of CHG001-
+
+* The highest level credit account.
+      g_hiacc = p_prtnr.
+    ENDIF.
+
+* Beign of CHG001+
+* Retrieving the lower level credit accounts.
+    lt_but050[] = gt_but050[].
+    DELETE lt_but050 WHERE partner1 NE p_prtnr.
+    CLEAR wa_but050l.
+    LOOP AT lt_but050 INTO wa_but050l.
+      wa_partner-sign = gc_sign.
+      wa_partner-option = gc_option.
+      wa_partner-low = wa_but050l-partner2.
+      APPEND wa_partner TO g_rpartner.
+      CLEAR wa_partner.
+
+      CLEAR wa_but050.
+      READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                                 partner1 = wa_but050l-partner2.
+      IF sy-subrc = 0.
+        READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                        partner1 = wa_but050-partner2.
+        WHILE sy-subrc EQ 0.
+          wa_partner-sign = gc_sign.
+          wa_partner-option = gc_option.
+          wa_partner-low = wa_but050-partner2.
+          APPEND wa_partner TO g_rpartner.
+          CLEAR wa_partner.
+
+          READ TABLE gt_but050 INTO wa_but050 WITH KEY
+                            partner1 = wa_but050-partner2.
+        ENDWHILE.
+        wa_partner-sign = gc_sign.
+        wa_partner-option = gc_option.
+        wa_partner-low = wa_but050-partner2.
+        APPEND wa_partner TO g_rpartner.
+        CLEAR wa_partner.
+      ENDIF.
+    ENDLOOP.
+* End of CHG001+
+  ENDIF.                                                    "RK09140
+
+* Begin of RK09140
+  IF g_rpartner[] IS INITIAL.
+* If no lower accounts are found, assign the same partner as lowest account
+    wa_partner-sign = gc_sign.
+    wa_partner-option = gc_option.
+    wa_partner-low = p_prtnr.
+    APPEND wa_partner TO g_rpartner.
+    CLEAR wa_partner.
+  ENDIF.
+* End of RK09140
+ENDFORM.                    "sub_get_hiacc
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_but000
+*&---------------------------------------------------------------------*
+* Subroutine to retrieve data from table BUT000
+*----------------------------------------------------------------------*
+FORM sub_get_but000.
+
+  IF NOT g_hiacc IS INITIAL.
+    SELECT SINGLE partner     "Business Partner Number
+           name_org1   "Name 1 of organization
+           crdat       "Date on which the object was created
+    INTO wa_but000
+    FROM but000      "BP: General data I
+   WHERE partner = g_hiacc.
+    IF sy-subrc <> 0.
+      MESSAGE e005 WITH 'Partner does not exist in FSCM'.
+    ENDIF.
+  ENDIF.
+ENDFORM.                    "sub_get_but000
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_colnam
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+
+FORM sub_get_colnam .
+
+  DATA: l_partner TYPE bu_partner.
+
+  IF NOT p_prtnr IS INITIAL.
+    SELECT SINGLE partner1   "Business Partner Number
+    FROM but050
+    INTO l_partner
+    WHERE partner2 = p_prtnr.
+    CHECK sy-subrc = 0.
+
+    SELECT SINGLE partner     "Business Partner Number
+                  name_last  "Last name of business partner (person)
+                  name_first "First name of business partner (person)
+    FROM but000
+    INTO wa_crdtacc
+    WHERE partner = l_partner.
+* Here sy-subrc check is not necesaary.
+  ENDIF.
+
+ENDFORM.                    " sub_get_colnam
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_ukm_cms
+*&---------------------------------------------------------------------*
+* Subroutine to retrieve data from table UKMBP_CMS.
+*----------------------------------------------------------------------*
+FORM sub_get_ukm_cms.
+  IF NOT wa_but000 IS INITIAL.
+    SELECT SINGLE partner        "Business Partner Number
+           check_rule     "Rule for Credit Check
+           risk_class     "Risk Class
+    INTO wa_ukm_cms
+    FROM ukmbp_cms   "SAP Credit Management: Credit Master Data for Partner
+    WHERE partner = wa_but000-partner.
+    IF sy-subrc = 0.
+* Retrieve the Risk Class text
+      SELECT SINGLE * FROM ukm_risk_cl0t
+      INTO wa_risktxt
+      WHERE langu = sy-langu
+      AND risk_class = wa_ukm_cms-risk_class.
+* Sy-subrc check does not effect further processing hence not required
+    ENDIF.
+  ENDIF.
+ENDFORM.                    "sub_get_ukm_cms
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_ukm_sgm
+*&---------------------------------------------------------------------*
+* Subroutine to retrieve data from table UKMBP_CMS_SGM
+*----------------------------------------------------------------------*
+FORM sub_get_ukm_sgm.
+  IF NOT wa_but000 IS INITIAL.
+    SELECT SINGLE partner    "Business Partner Number
+           credit_sgmnt      "Credit Segment
+           credit_limit      "Credit Limit
+           limit_valid_date  "Valid to date
+           follow_up_dt      "Resubmission Date
+    INTO wa_ukm_sgm
+    FROM ukmbp_cms_sgm  "SAP Credit Management: Master Data for Credit Account
+    WHERE partner = wa_but000-partner
+    AND   credit_sgmnt = g_crdtsgm.
+* Sy-subrc check does not effect further processing hence not required.
+  ENDIF.
+ENDFORM.                    "sub_get_ukm_sgm
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_ukm_tots
+*&---------------------------------------------------------------------*
+*  Subroutine to retrieve data from table UKM_TOTALS
+*----------------------------------------------------------------------*
+FORM sub_get_ukm_tots.
+
+  DATA: lt_ukm_totals TYPE STANDARD TABLE OF ukm_totals INITIAL SIZE 0,
+        wa_ukm_totals TYPE ukm_totals.
+
+  IF NOT wa_but000 IS INITIAL.
+* Begin of AB001
+*    CALL FUNCTION 'UKM_COMMTS_READ'
+*      EXPORTING
+*        I_PARTNER     = WA_BUT000-PARTNER
+*        I_SEGMENT     = G_CRDTSGM
+*      TABLES
+*        ET_UKM_TOTALS = LT_UKM_TOTALS.
+*    IF SY-SUBRC = 0.
+* Retrieve the open order amount
+    CLEAR: wa_ukm_totals.
+    CLEAR: g_openamt , g_opendel , g_acamt , g_invoice.
+    FREE MEMORY ID 'ZCREX'.                  "PC001++
+    PERFORM build_selection_table2.
+    SUBMIT ZUKM_COMMTS_DELETE
+         WITH SELECTION-TABLE i_sel
+         AND RETURN.
+    IMPORT gt_totalsdisplay1 FROM MEMORY ID  'ZFCREX'.
+
+*    PERFORM f_calculate_open_order_del_bil.
+
+    LOOP AT gt_totalsdisplay1 INTO wa_totalsdisplay1.
+      CASE wa_totalsdisplay1-comm_typ.
+        WHEN gc_hunrd.
+          g_openamt = g_openamt + wa_totalsdisplay1-amount.
+        WHEN gc_400.
+          g_opendel = g_opendel + wa_totalsdisplay1-amount.
+        WHEN gc_500.
+          g_acamt  = g_acamt  + wa_totalsdisplay1-amount.
+        WHEN OTHERS.
+          g_invoice = g_invoice + wa_totalsdisplay1-amount.
+      ENDCASE.
+    ENDLOOP.
+
+* Calculate the total credit exposure
+    g_totexp = g_openamt + g_opendel + g_acamt + g_invoice.
+*PERFORM OPEN_ORDERS_WITH_DELIVERIES.
+
+
+*PERFORM BUILD_SELECTION_TABLE2.
+*    SUBMIT zr2k9_openorder_report
+*           WITH SELECTION-TABLE I_SEL
+*           EXPORTING LIST TO MEMORY
+*           AND RETURN.
+*    IMPORT I_OPEN2[] FROM MEMORY ID 'ZOPOR'.
+*
+*    SELECT VBELN POSNR NETPR FROM VBAP INTO TABLE I_OPEN_ORDER
+*      FOR ALL ENTRIES IN I_OPEN1
+*      WHERE VBELN = I_OPEN1-VBELN AND
+*            POSNR = I_OPEN1-POSNR.
+*LOOP AT I_OPEN1.
+*    READ TABLE I_VBFA WITH KEY VBELV = I_OPEN1-VBELN
+*                               POSNV = I_OPEN1-POSNR.
+*       IF SY-SUBRC = 0.
+*          READ TABLE I_OPEN_ORDER WITH KEY VBELN = I_OPEN1-VBELN
+*                                    POSNR = I_OPEN1-POSNR.
+*          IF SY-SUBRC = 0.
+*            READ TABLE I_OPEN2 WITH KEY VBELN = I_OPEN2-VBELN
+*                                    POSNR = I_OPEN2-POSNR.
+*            IF SY-SUBRC = 0.
+*              IF I_OPEN2-CNFQTY NE I_OPEN2-DELQTY.
+*                I_OPEN1-OPQTY = I_OPEN2-CNFQTY - I_OPEN2-DELVRD.
+*                G_OPENAMT = G_OPENAMT + ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*                MOVE-CORRESPONDING I_OPEN TO I_OPEN_ORDER1.
+*                I_OPEN_ORDER1-NETPR = ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*                APPEND I_OPEN_ORDER1.
+*                CLEAR I_OPEN_ORDER.
+*                I_OPEN1-OPQTY = I_OPEN2-DELVRD.
+*                I_OPEN1-OPQTY = I_OPEN2-CONFQTY - I_OPEN2-DELQTY.
+*                G_OPENDEL = G_OPENDEL + ( I_OPEN_ORDER-NETPR * I_OPEN1-OPQTY ).
+*                MOVE-CORRESPONDING I_OPEN1 TO I_OPEN_DEL.
+*                I_OPEN_DEL-DELNO = I_VBFA-VBELN.
+*                I_OPEN_DEL-DELITM = I_VBFA-POSNN.
+*                I_OPEN_DEL-NETPR = ( I_OPEN_ORDER-NETPR * I_OPEN1-OPQTY ).
+*                APPEND I_OPEN_DEL.
+*                CLEAR I_OPEN_ORDER.
+*              ENDIF.
+*            ENDIF.
+*          ENDIF.
+*
+*       ELSE.
+*          READ TABLE I_OPEN_ORDER WITH KEY VBELN = I_OPEN1-VBELN
+*                                    POSNR = I_OPEN1-POSNR.
+*          IF SY-SUBRC = 0.
+*            G_OPENAMT = G_OPENAMT + ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*            MOVE-CORRESPONDING I_OPEN TO I_OPEN_ORDER1.
+*            I_OPEN_ORDER1-NETPR = ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*            APPEND I_OPEN_ORDER1.
+*            CLEAR I_OPEN_ORDER.
+*          ENDIF.
+*       ENDIF.
+*ENDLOOP.
+*   G_TOTEXP = G_OPENAMT + G_OPENDEL.
+
+* End of AB001
+  ENDIF.
+ENDFORM.                    "sub_get_ukm_tots
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_hold
+*&---------------------------------------------------------------------*
+*  Subroutine to retrieve the Sales Document data for On hold
+*----------------------------------------------------------------------*
+FORM sub_get_hold.
+
+** Start of Adding SA101+
+*  DATA:   lv_index  TYPE sy-tabix,
+*          lv_onhold TYPE netwr_ap.
+*
+*  IF NOT g_rpartner[] IS INITIAL.
+*
+*    SELECT vbeln   "Sales Document
+*           knkli   "Customer's account number with credit limit reference
+*           netwr   " Net Value
+*    INTO TABLE gt_vbak
+*    FROM vbak      "Sales Document: Header Data
+*    WHERE vbeln IN g_rvbeln
+*    AND knkli IN g_rpartner.
+*
+*    IF gt_vbak IS NOT INITIAL.
+** Retrieve the net amount for all the orders.
+*      SELECT vbeln  "Sales Document
+*             posnr  "Sales Document Item
+*             netwr  "Net value of the order item in document currency
+*             netpr  " Net Proce of the Order
+*         INTO TABLE gt_vbap
+*         FROM vbap   "Sales Document: Item Data
+*         FOR ALL ENTRIES IN gt_vbak
+*         WHERE vbeln = gt_vbak-vbeln.
+** Get all the delivery from doc flow for all the orders.
+*      SELECT vbelv posnv vbeln posnn vbtyp_n vbtyp_v
+*        INTO TABLE gt_vbfa
+*        FROM   vbfa
+*        FOR ALL ENTRIES IN gt_vbap
+*        WHERE vbelv   = gt_vbap-vbeln
+*        AND   posnv   = gt_vbap-posnr
+*        AND   vbtyp_n = 'J'
+*        AND   vbtyp_v = 'C'.
+*
+** Retrieve the list of On hold documents from VBUK table for all the orders Header Level.
+*      SELECT vbeln   "Sales and Distribution Document Number
+*             cmgst   "Overall status of credit checks
+*        INTO TABLE gt_vbuk
+*        FROM vbuk    "Sales Document: Header Status and Administrative Data
+*        FOR ALL ENTRIES IN gt_vbap
+*        WHERE vbeln = gt_vbap-vbeln
+*        AND   cmgst = gc_stcrd.
+** Retrieve the list of On hold documents from VBUP table for all the orders Item Level.
+*      SELECT vbeln   "Sales and Distribution Document Number
+*             posnr
+*             gbsta   "Overall status
+*        INTO TABLE gt_vbup
+*        FROM vbup    "Sales Document: Header Status and Administrative Data
+*        FOR ALL ENTRIES IN gt_vbap
+*        WHERE vbeln = gt_vbap-vbeln
+*        AND   posnr = gt_vbap-posnr
+*        AND   gbsta IN ('A', 'B').
+*
+** Get all the delivery data for all the delivery.
+*      SELECT vbeln posnr lfimg FROM lips
+*         INTO TABLE gt_lips
+*         FOR ALL ENTRIES IN gt_vbfa
+*         WHERE vbeln = gt_vbfa-vbeln
+*         AND posnr   = gt_vbfa-posnn.
+*      IF sy-subrc = 0.
+** Retrieve the list of On hold documents from VBUK table for all the delivery data
+*        SELECT vbeln   "Sales and Distribution Document Number
+*               cmgst   "Overall status of credit checks
+*          INTO TABLE gt_vbuk_d
+*          FROM vbuk    "Sales Document: Header Status and Administrative Data
+*          FOR ALL ENTRIES IN gt_lips
+*          WHERE vbeln = gt_lips-vbeln
+*          AND   cmgst = gc_stcrd.
+*
+** Retrieve the list of On hold documents from VBUP table for all the Deviveries Item Level.
+*        SELECT vbeln   "Sales and Distribution Document Number
+*               posnr
+*               gbsta   "Overall status
+*          INTO TABLE gt_vbup_d
+*          FROM vbup    "Sales Document: Header Status and Administrative Data
+*          FOR ALL ENTRIES IN gt_lips
+*          WHERE vbeln = gt_lips-vbeln
+*          AND   posnr = gt_lips-posnr
+*          AND   gbsta IN ('A', 'B').
+*      ENDIF.
+*
+*      SORT gt_vbap BY vbeln posnr.
+*      SORT gt_vbuk BY vbeln.
+*      SORT gt_vbuk_d BY vbeln.
+*      SORT gt_vbup BY vbeln posnr.
+*      SORT gt_vbup_d BY vbeln posnr.
+*      SORT gt_lips BY vbeln posnr.
+*
+** Calculate the Net value of the order items/Delivery Items  in all the on hold docs
+*      LOOP AT gt_vbap INTO wa_vbap.
+*        READ TABLE gt_vbuk INTO wa_vbuk WITH KEY vbeln = wa_vbap-vbeln BINARY SEARCH.
+*        IF sy-subrc = 0.
+*          READ TABLE gt_vbup INTO wa_vbup WITH KEY vbeln = wa_vbap-vbeln posnr = wa_vbap-posnr BINARY SEARCH.
+*          IF sy-subrc = 0.
+*            g_onhold = g_onhold + wa_vbap-netwr.
+*          ENDIF.
+*        ELSE.
+*          LOOP AT gt_vbfa INTO wa_vbfa WHERE vbelv = wa_vbap-vbeln AND posnv = wa_vbap-posnr.
+**       READ TABLE gt_vbfa INTO wa_vbfa WITH KEY vbelv = wa_vbap-vbeln posnv = wa_vbap-posnr.
+**        IF sy-subrc = 0.
+*            READ TABLE gt_lips INTO wa_lips WITH KEY vbeln = wa_vbfa-vbeln posnr = wa_vbfa-posnn BINARY SEARCH.
+*            IF sy-subrc = 0.
+*              READ TABLE gt_vbuk_d INTO wa_vbuk_d WITH KEY vbeln = wa_lips-vbeln BINARY SEARCH.
+*              IF sy-subrc = 0.
+*                READ TABLE gt_vbup_d INTO wa_vbup_d WITH KEY vbeln = wa_lips-vbeln posnr = wa_lips-posnr BINARY SEARCH.
+*                IF sy-subrc = 0.
+*                  lv_onhold = wa_lips-lfimg * wa_vbap-netpr.
+*                  g_onhold = lv_onhold + g_onhold.
+*                  CLEAR lv_onhold.
+*                ENDIF.
+*              ENDIF.
+*            ENDIF.
+**        ENDIF.
+*          ENDLOOP.
+*        ENDIF.
+*        CLEAR: lv_index,wa_vbuk,wa_vbap,wa_vbuk_d,wa_vbfa,wa_lips.
+*      ENDLOOP.
+*    ENDIF.
+*  ENDIF.
+*
+** End of Adding SA101+
+  refresh i_sel.
+  CLEAR i_sel.
+* Populate data for submit program
+  I_SEL-SELNAME = 'KKBER'.
+  I_SEL-KIND = 'S'.
+  I_SEL-SIGN = 'I'.
+  I_SEL-OPTION = 'EQ'.
+  I_SEL-LOW = P_KKBER.
+  APPEND I_SEL.
+* Populate data for submit program
+  I_SEL-SELNAME = 'KNKLI'.
+  I_SEL-KIND = 'S'.
+  I_SEL-SIGN = 'I'.
+  I_SEL-OPTION = 'EQ'.
+  I_SEL-LOW = P_PRTNR.
+  APPEND I_SEL.
+  EXPORT i_sel to MEMORY ID 'ZRV_SEL'.
+    SUBMIT ZRVKRED02_PCEC_ZCUSTPROF
+         WITH SELECTION-TABLE I_SEL
+         AND RETURN.
+    IMPORT G_onhold FROM MEMORY ID 'ZRV_HOLD'.
+
+ENDFORM.                    "sub_get_hold
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_accbal
+*&---------------------------------------------------------------------*
+*  Subroutine to retrieve the A/R balance.                             *
+*----------------------------------------------------------------------*
+FORM sub_get_accbal.
+
+  DATA: l_tkeybal TYPE STANDARD TABLE OF bapi3007_3 INITIAL SIZE 0,
+        l_return TYPE bapireturn,
+        l_keybal TYPE bapi3007_3.
+
+  IF NOT g_rpartner[] IS INITIAL.
+    CLEAR wa_partner.
+    LOOP AT g_rpartner INTO wa_partner.
+* Get the A/R amount for all the lower level partners.
+      CALL FUNCTION 'BAPI_AR_ACC_GETKEYDATEBALANCE'
+        EXPORTING
+          companycode = p_bukrs
+          customer    = wa_partner-low
+          keydate     = sy-datum
+        IMPORTING
+          return      = l_return
+        TABLES
+          keybalance  = l_tkeybal.
+
+      IF l_return IS INITIAL.
+        CLEAR l_keybal.
+        READ TABLE l_tkeybal INTO l_keybal INDEX 1.
+        CHECK sy-subrc = 0.
+* Sum up the A/R balances.
+        g_arbal = g_arbal + l_keybal-t_curr_bal.
+      ENDIF.
+    ENDLOOP.
+* IF there are no lower level partners we take the higest partner
+* same as the selection screen                                    "SS08473
+  ELSE .
+    CALL FUNCTION 'BAPI_AR_ACC_GETKEYDATEBALANCE'
+      EXPORTING
+        companycode = p_bukrs
+        customer    = p_prtnr
+        keydate     = sy-datum
+      IMPORTING
+        return      = l_return
+      TABLES
+        keybalance  = l_tkeybal.
+
+    IF l_return IS INITIAL.
+      CLEAR l_keybal.
+      READ TABLE l_tkeybal INTO l_keybal INDEX 1.
+      CHECK sy-subrc = 0.
+* Sum up the A/R balances.
+      g_arbal = g_arbal + l_keybal-t_curr_bal.
+    ENDIF.
+  ENDIF.
+ENDFORM.                    "sub_get_accbal
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_sales
+*&---------------------------------------------------------------------*
+* Subroutine to retrieve the data for YTD Sales and LY Sales.          *
+*----------------------------------------------------------------------*
+
+FORM sub_get_ytdsales.
+
+  DATA: l_year  TYPE gjahr,
+        l_ytd   TYPE umxxu,
+        l_ly    TYPE umxxu,
+        l_monat TYPE anzbp,
+        l_anzbp TYPE anzbp.
+
+* Begin of CH003+
+  DATA: l_tmp_month TYPE monat,
+        l_month TYPE anzbp.
+  CLEAR: l_month.
+*  End of CH003+
+
+  CLEAR: l_year, l_anzbp.
+*Commented By CH003
+*  l_year = sy-datum+0(4).
+*End Commect By CH003
+
+*  Begin of CH003+
+*  Getting the Current Fiscal Year and Month
+  CALL FUNCTION 'GET_CURRENT_YEAR'
+    EXPORTING
+      bukrs = p_bukrs
+      date  = sy-datum
+    IMPORTING
+      currm = l_tmp_month
+      curry = l_year.
+  IF sy-subrc = 0.
+    l_month =  l_tmp_month.
+  ENDIF.
+* End of CH003+
+
+  IF NOT g_rpartner[] IS INITIAL.
+
+* Retrieve the number of posting periods.
+    SELECT SINGLE anzbp anzsp  "Number of posting periods
+    INTO (l_anzbp, l_monat)
+    FROM t009   "Shortened fiscal years in Asset Accounting
+    WHERE periv = gc_periv.
+*    AND GJAHR = L_YEAR.
+* Sy-subrc check does not effect further processing hence not required.
+
+    CLEAR wa_partner.
+    LOOP AT g_rpartner INTO wa_partner.
+      CLEAR: l_ytd, l_ly.
+* Get the YTD sales and the LY sales for all the lower level accounts.
+      CALL FUNCTION 'CUSTOMER_BALANCE'
+        EXPORTING
+          anzbp      = l_anzbp
+          bukrs      = p_bukrs
+          gjahr      = l_year
+          kunnr      = wa_partner-low
+*Begin of comment by CH003
+*         monat      = l_monat
+*End of Comment by CH003
+
+* Begin of CH003+
+          monat      = l_month
+* End of CH003+
+          periv      = gc_periv
+          xh12mon    = gc_x
+          xh6mon     = gc_x
+        IMPORTING
+          ump2u      = l_ytd
+          vmp2u      = l_ly
+        EXCEPTIONS
+          no_balance = 1
+          OTHERS     = 2.
+      IF sy-subrc = 0.
+        g_ytdsls = g_ytdsls + l_ytd.
+        g_lysls  = g_lysls + l_ly.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.                    "sub_get_sales
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_bsid
+*&---------------------------------------------------------------------*
+* Subroutine to retrieve data for Aging summary from Accounting:       *
+* Secondary Index for Customers (BSID) table                           *
+*----------------------------------------------------------------------*
+FORM sub_get_bsid.
+
+  DATA: l_duedt TYPE bldat.
+
+  IF NOT g_rpartner[] IS INITIAL.
+    SELECT bukrs    "Company Code
+           kunnr    "Customer Number 1
+           bldat    "Document Date in Document
+           shkzg    "Debit/Credit Indicator
+           dmbtr    "Amount in Local Currency
+           zfbdt    "Baseline Date for Due Date Calculation
+           zbd1t    "Cash discount days 1
+           zbd2t    "Cash discount days 2
+           zbd3t    "Net Payment Terms Period
+           rebzg    "Number of the Invoice the Transaction Belongs to
+    INTO TABLE gt_bsid
+    FROM bsid   "Accounting: Secondary Index for Customers
+    WHERE bukrs = p_bukrs
+    AND   kunnr IN g_rpartner.
+*    CHECK sy-subrc = 0.    "GS002-
+    IF sy-subrc = 0.                                        "GS002+
+      LOOP AT gt_bsid INTO wa_bsid.
+        IF wa_bsid-zfbdt <> 0.
+          MOVE wa_bsid-zfbdt        TO l_duedt.
+        ELSE.
+          MOVE wa_bsid-bldat        TO l_duedt.
+        ENDIF.
+* -- credit memos with rebzg = 'V' -- calculate due-date like invoice
+        IF wa_bsid-shkzg <> gc_shkzg OR
+         ( wa_bsid-shkzg =  gc_shkzg AND wa_bsid-rebzg = gc_rebzg ).
+* -- add terms-period(zbd3t) OR 2nd-disc-period(zbd2t) OR
+* --                            1st-disc-period(zbd1t)
+          IF wa_bsid-zbd3t <> 0.
+            ADD  wa_bsid-zbd3t        TO l_duedt.
+          ELSEIF wa_bsid-zbd2t <> 0.
+            ADD  wa_bsid-zbd2t        TO l_duedt.
+          ELSEIF wa_bsid-zbd1t <> 0.
+            ADD  wa_bsid-zbd1t        TO l_duedt.
+          ENDIF.
+        ENDIF.
+        IF wa_bsid-shkzg = gc_shkzg.
+          wa_bsid-dmbtr = wa_bsid-dmbtr * -1.
+        ENDIF.
+* To calculate the Aging dues according to the period.
+        PERFORM sub_accum_aging USING l_duedt.
+
+        CONCATENATE text-027 wa_but000-partner INTO wa_details-agin_summ.
+        wa_details-tot_ar = g_arbal.
+      ENDLOOP.
+      wa_details-hclast = g_hclast.                         "CHG002+
+      APPEND wa_details TO gt_details.
+      CLEAR wa_details.
+* If there are no lower level partner we take the highest level partner
+* which is the selection screen partner
+    ELSE .
+      SELECT bukrs    "Company Code
+           kunnr    "Customer Number 1
+           bldat    "Document Date in Document
+           shkzg    "Debit/Credit Indicator
+           dmbtr    "Amount in Local Currency
+           zfbdt    "Baseline Date for Due Date Calculation
+           zbd1t    "Cash discount days 1
+           zbd2t    "Cash discount days 2
+           zbd3t    "Net Payment Terms Period
+           rebzg    "Number of the Invoice the Transaction Belongs to
+    INTO TABLE gt_bsid
+    FROM bsid   "Accounting: Secondary Index for Customers
+    WHERE bukrs = p_bukrs
+    AND   kunnr = p_prtnr.
+*    CHECK SY-SUBRC = 0.
+      IF sy-subrc = 0.
+        LOOP AT gt_bsid INTO wa_bsid.
+          IF wa_bsid-zfbdt <> 0.
+            MOVE wa_bsid-zfbdt        TO l_duedt.
+          ELSE.
+            MOVE wa_bsid-bldat        TO l_duedt.
+          ENDIF.
+* -- credit memos with rebzg = 'V' -- calculate due-date like invoice
+          IF wa_bsid-shkzg <> gc_shkzg OR
+           ( wa_bsid-shkzg =  gc_shkzg AND wa_bsid-rebzg = gc_rebzg ).
+* -- add terms-period(zbd3t) OR 2nd-disc-period(zbd2t) OR
+* --                            1st-disc-period(zbd1t)
+            IF wa_bsid-zbd3t <> 0.
+              ADD  wa_bsid-zbd3t        TO l_duedt.
+            ELSEIF wa_bsid-zbd2t <> 0.
+              ADD  wa_bsid-zbd2t        TO l_duedt.
+            ELSEIF wa_bsid-zbd1t <> 0.
+              ADD  wa_bsid-zbd1t        TO l_duedt.
+            ENDIF.
+          ENDIF.
+          IF wa_bsid-shkzg = gc_shkzg.
+            wa_bsid-dmbtr = wa_bsid-dmbtr * -1.
+          ENDIF.
+* To calculate the Aging dues according to the period.
+          PERFORM sub_accum_aging USING l_duedt.
+
+          CONCATENATE text-027 wa_but000-partner INTO wa_details-agin_summ.
+          wa_details-tot_ar = g_arbal.
+        ENDLOOP.
+        wa_details-hclast = g_hclast.                       "CHG002+
+        APPEND wa_details TO gt_details.
+        CLEAR wa_details.
+
+      ENDIF.
+    ENDIF.                                                  "GS002+
+  ENDIF.
+
+* Begin Of GS002+
+  IF gt_details IS INITIAL.
+    CONCATENATE text-027 wa_but000-partner INTO wa_details-agin_summ.
+    wa_details-hclast = g_hclast.
+    APPEND wa_details TO gt_details.
+  ENDIF.
+*End of GS002+
+ENDFORM.                    "sub_get_bsid
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_arrdays
+*&---------------------------------------------------------------------*
+*  Subroutine to get the days in arrear.
+*----------------------------------------------------------------------*
+FORM sub_get_arrdays.
+* Begin of change                                     "RN001
+  DATA:  l_cuyear(04) TYPE n,
+         l_pryear(04) TYPE n.
+* End of change                                       "Rn001
+
+* start of addition by PAS01
+  CONSTANTS: lc_01 TYPE char2 VALUE '01',
+             lc_12 TYPE char2 VALUE '12'.
+* end of addition by PAS01
+
+  IF NOT wa_but000 IS INITIAL.
+
+    DATA: lt_knb4   TYPE ukm_t_iknb4,
+          wa_knb4   TYPE iknb4,
+          l_currmth TYPE char2,
+          l_prevmth TYPE char2.
+
+    l_currmth = sy-datum+4(2).
+*    l_prevmth = l_currmth - 1.                                        "--PAS01
+* start of addition by PAS01
+    IF l_currmth = lc_01.
+      l_prevmth = lc_12.
+    ELSE.
+      l_prevmth = l_currmth - 1.
+    ENDIF.
+* end of addition by PAS01
+* Begin of Change                                     "RN001
+    l_cuyear = sy-datum+0(4).
+    IF l_currmth = '01'.
+      l_pryear = l_cuyear - 1.
+    ELSE.
+      l_pryear = l_cuyear.
+    ENDIF.
+* End of change                                       "RN001
+* Get the payment history for the highest level credit account.
+    CALL FUNCTION 'UKM_GET_AR_PAYMENT_HISTORY'
+      EXPORTING
+        i_bukrs            = p_bukrs
+        i_kunnr            = wa_but000-partner
+      IMPORTING
+        t_knb4             = lt_knb4
+      EXCEPTIONS
+        no_bukrs           = 1
+        no_payment_history = 2
+        OTHERS             = 3.
+    IF sy-subrc = 0.
+*      READ TABLE LT_KNB4 INTO WA_KNB4 WITH KEY MONXX = L_CURRMTH. "RN001
+      READ TABLE lt_knb4 INTO wa_knb4 WITH KEY jahxx = l_cuyear"RN001
+                                               monxx = l_currmth.
+      IF sy-subrc = 0.
+* Determine the days in arrear for the current month
+        IF wa_knb4-agsxx GT wa_knb4-agnxx.
+          g_arrdays = wa_knb4-vzsxx.
+        ELSEIF wa_knb4-agnxx GT wa_knb4-agsxx.
+          g_arrdays = wa_knb4-vznxx.
+        ENDIF.
+      ELSE.
+* Else determine the days in arrear for the previous month
+*        READ TABLE LT_KNB4 INTO WA_KNB4 WITH KEY MONXX = L_PREVMTH."RN001
+        READ TABLE lt_knb4 INTO wa_knb4 WITH KEY jahxx = l_pryear"RN001
+                                                 monxx = l_prevmth.
+        IF sy-subrc = 0.
+          IF wa_knb4-agsxx GT wa_knb4-agnxx.
+            g_arrdays = wa_knb4-vzsxx.
+          ELSEIF wa_knb4-agnxx GT wa_knb4-agsxx.
+            g_arrdays = wa_knb4-vznxx.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+    ELSE.
+      g_arrdays = 0.
+    ENDIF.
+  ENDIF.
+ENDFORM.                    "sub_get_arrdays
+
+* Begin of CHG002+
+FORM sub_get_hclast.
+
+  DATA: l_year  TYPE gjahr,
+        l_anzbp TYPE anzbp,
+        l_monat TYPE anzbp,
+        l_h06sa TYPE saldo,
+        l_h12sa TYPE saldo,
+        l_h06mo TYPE monat,
+        l_h12mo TYPE monat.
+
+
+  DATA:      l_uml01           TYPE umxxs,    " Saldo vor 01 Monat
+             l_uml02           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml03           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml04           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml05           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml06           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml07           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml08           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml09           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml10           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml11           TYPE umxxs,    " Saldo vor 02 Monaten
+             l_uml12           TYPE umxxs.    " Saldo vor 02 Monaten
+
+  DATA: lt_saltab TYPE STANDARD TABLE OF gx_saldo INITIAL SIZE 0,
+        wa_saltab TYPE gx_saldo.
+
+  CLEAR: l_year, l_anzbp.
+
+* Begin of CH003+
+  DATA: ls_knc1 TYPE knc1,             " Work area for KNC1
+        l_sales LIKE knc1-um01u,       " Sales value
+        l_year1 TYPE gjahr ,           " Previous fiscal year
+        l_tmp(2) TYPE n,               " 12 month variable
+        l_tmp_month TYPE monat,        " MOnth Numeric 2
+        l_month TYPE anzbp,            " Month Numeric 3
+        l_m_cnt TYPE sy-tabix,         " Month int
+        l_month_cnt TYPE sy-tabix,     " Month Count int
+        l_m_anzbp TYPE sy-tabix,       " ANZBP int
+        l_cnt TYPE sy-tabix.           " Total Count
+
+  CLEAR: l_month,l_month_cnt,l_cnt,l_m_cnt.
+*  End of CH003+
+
+* *Commented By CH003-
+*  l_year = sy-datum+0(4).
+*End Commect By CH003-
+
+
+* Retrieve the number of posting periods.
+  SELECT SINGLE anzbp anzsp  "Number of posting periods
+  INTO (l_anzbp, l_monat)
+  FROM t009   "Shortened fiscal years in Asset Accounting
+  WHERE periv = gc_periv.
+  IF sy-subrc = 0.
+    l_m_anzbp = l_anzbp.
+  ENDIF.
+
+*  Begin of CH003+
+*  Getting the Current Fiscal Year and Month
+  CALL FUNCTION 'GET_CURRENT_YEAR'
+    EXPORTING
+      bukrs = p_bukrs
+      date  = sy-datum
+    IMPORTING
+      currm = l_tmp_month
+      curry = l_year.
+  IF sy-subrc = 0.
+    l_month =  l_tmp_month.
+    l_m_cnt = l_month.
+  ENDIF.
+
+* get the Sales data from KNC1 for the Current Fiscal Year
+  SELECT SINGLE * FROM knc1 INTO ls_knc1
+     WHERE kunnr = g_hiacc
+     AND   bukrs = p_bukrs
+     AND   gjahr = l_year.
+  IF sy-subrc = 0.
+* Then Get the Month-wise Sales data into an internal table for the current fiscal year upto Current Month
+    DO l_anzbp TIMES
+     VARYING l_sales FROM ls_knc1-um01u NEXT ls_knc1-um02u.
+      l_month_cnt = sy-index.
+      IF l_month_cnt > l_m_cnt.
+        l_month_cnt = l_month_cnt - 1.
+        EXIT.
+      ENDIF.
+      l_tmp = sy-index.
+      wa_saltab-lnumm = l_tmp.
+      wa_saltab-saldo = l_sales.
+      APPEND wa_saltab TO lt_saltab.
+    ENDDO.
+
+*      Start of Commenting CH004-
+*    ELSE.
+*      MESSAGE E004(F4) WITH g_hiacc p_bukrs l_year.
+*      End of Commenting CH004-
+  ENDIF.
+
+*    *Count the Remaining month.
+  l_cnt =  l_m_anzbp - l_month_cnt.
+  l_year1 = l_year - 1.
+
+* Get the Previous Fiscal year data and fill into internal table for remaining month from the current Fiscal year.
+*Begin Of GS002
+*  SELECT SINGLE * FROM KNC1 INTO LS_KNC1         "GS002-
+*      WHERE KUNNR = G_HIACC
+*      AND   BUKRS = P_BUKRS
+*      AND   GJAHR = L_YEAR.
+
+  SELECT SINGLE * FROM knc1 INTO ls_knc1                    "GS002+
+      WHERE kunnr = g_hiacc
+      AND   bukrs = p_bukrs
+      AND   gjahr = l_year1.
+*End of GS002
+  IF sy-subrc = 0.
+    DO l_cnt TIMES
+     VARYING l_sales FROM ls_knc1-um01u NEXT ls_knc1-um02u.
+      l_tmp = l_tmp + 1.
+      wa_saltab-lnumm = l_tmp.
+      wa_saltab-saldo = l_sales .
+      APPEND wa_saltab TO lt_saltab.
+    ENDDO.
+  ENDIF.
+
+* Sort the table in decending order to get 12 months highest Sale value
+  SORT lt_saltab BY saldo DESCENDING.
+  READ TABLE lt_saltab INTO wa_saltab INDEX 1.
+  IF sy-subrc = 0.
+    g_hclast = wa_saltab-saldo.
+  ENDIF.
+* End of CH003+
+
+* Start Commented By CH003-
+*  CALL FUNCTION 'CUSTOMER_BALANCE'
+*    EXPORTING
+*      anzbp      = l_anzbp
+*      bukrs      = p_bukrs
+*      gjahr      = l_year
+*      kunnr      = g_hiacc
+*
+**         Begin of comment by CH003-
+**         monat      = l_monat
+**         End of Comment by CH003-
+*
+** Begin of CH003+
+*          monat      = l_month
+** End of CH003+
+*
+*      periv      = gc_periv
+*      xh12mon    = gc_x
+*      xh6mon     = gc_x
+*    IMPORTING
+*      uml01      = l_uml01
+*      uml02      = l_uml02
+*      uml03      = l_uml03
+*      uml04      = l_uml04
+*      uml05      = l_uml05
+*      uml06      = l_uml06
+*      uml07      = l_uml07
+*      uml08      = l_uml08
+*      uml09      = l_uml09
+*      uml10      = l_uml10
+*      uml11      = l_uml11
+*      uml12      = l_uml12
+*    EXCEPTIONS
+*      no_balance = 1
+*      OTHERS     = 2.
+*  IF sy-subrc = 0.
+*    REFRESH: lt_saltab.
+*    CLEAR: wa_saltab.
+*    wa_saltab-lnumm = '01'. wa_saltab-saldo = l_uml01.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '02'. wa_saltab-saldo = l_uml02.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '03'. wa_saltab-saldo = l_uml03.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '04'. wa_saltab-saldo = l_uml04.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '05'. wa_saltab-saldo = l_uml05.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '06'. wa_saltab-saldo = l_uml06.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '07'. wa_saltab-saldo = l_uml07.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '08'. wa_saltab-saldo = l_uml08.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '09'. wa_saltab-saldo = l_uml09.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '10'. wa_saltab-saldo = l_uml10.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '11'. wa_saltab-saldo = l_uml11.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*    wa_saltab-lnumm = '12'. wa_saltab-saldo = l_uml12.
+*    APPEND wa_saltab TO lt_saltab.
+*    CLEAR wa_saltab.
+*  ENDIF.
+*
+*  READ TABLE lt_saltab INTO wa_saltab INDEX 1.
+*  l_h06sa = wa_saltab-saldo.
+*  l_h06mo = wa_saltab-lnumm.
+*  l_h12sa = wa_saltab-saldo.
+*  l_h12mo = wa_saltab-lnumm.
+*
+** ------ SALTAB abarbeiten ---------------------------------------------
+*  LOOP AT lt_saltab INTO wa_saltab.
+*    IF  wa_saltab-saldo > l_h06sa
+*    AND sy-tabix     < 7.
+*      l_h06sa = wa_saltab-saldo.
+*      l_h06mo = wa_saltab-lnumm.
+*    ENDIF.
+*    IF  wa_saltab-saldo > l_h12sa
+*    AND sy-tabix     < 13.
+*      l_h12sa = wa_saltab-saldo.
+*      l_h12mo = wa_saltab-lnumm.
+*    ENDIF.
+*    CLEAR wa_saltab.
+*  ENDLOOP.
+
+*  g_hclast = l_h12sa.
+
+*End Commect By CH003-
+ENDFORM.                    "sub_get_hclast
+* End of CHG002+
+*&---------------------------------------------------------------------*
+*&      Form  sub_alv_display                                          *
+*&---------------------------------------------------------------------*
+*   Subroutine to display the ALV List                                 *
+*----------------------------------------------------------------------*
+FORM sub_alv_display.
+
+  DATA: lv_repid TYPE sy-repid,
+        lv_pform TYPE slis_formname.
+
+  lv_repid = sy-repid.
+  lv_pform = 'SUB_PF_SET'.
+
+* Populate the field Catalog.
+  PERFORM sub_pop_fcat.
+
+* Populate the events for the ALV
+  PERFORM sub_pop_events.
+
+* Set the report layout.
+  wa_layout-min_linesize = 138.
+  wa_layout-colwidth_optimize = gc_x.
+
+  CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+      i_callback_program       = lv_repid
+      i_callback_pf_status_set = lv_pform
+      is_layout                = wa_layout
+      it_fieldcat              = gt_fcat
+      it_events                = gt_events
+    TABLES
+      t_outtab                 = gt_details
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.                    "sub_alv_display
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_pop_fcat
+*&---------------------------------------------------------------------*
+*   Subroutine to populate the field catalog
+*----------------------------------------------------------------------*
+FORM sub_pop_fcat.
+* To fill the field catalog values.
+  PERFORM sub_fill_fcat USING:
+  '1' 'GT_DETAILS' 'AGIN_SUMM' text-018 'C',
+  '2' 'GT_DETAILS' 'TOT_AR' text-019 'C',
+  '3' 'GT_DETAILS' 'NOT_DUE' text-020 'C',
+  '4' 'GT_DETAILS' '1_30DS' text-022 'C',
+  '5' 'GT_DETAILS' '31_60DS' text-023 'C',
+  '6' 'GT_DETAILS' '61_90DS' text-024 'C',
+  '7' 'GT_DETAILS' 'OVER90' text-025 'C',
+  '8' 'GT_DETAILS' 'TPD' text-026 'C',
+  '9' 'GT_DETAILS' 'HCLAST' text-029 'C'.
+
+ENDFORM.                    "sub_pop_fcat
+*&---------------------------------------------------------------------*
+*&      Form  sub_fill_fcat
+*&---------------------------------------------------------------------*
+*  Subroutine to fill the field catalog values.                        *
+*----------------------------------------------------------------------*
+*      -->P_COL      Column Position                                   *
+*      -->P_TABNAM   Table Name                                        *
+*      -->P_FNAM     Field Name                                        *
+*      -->P_TEXT     Long text                                         *
+*      -->P_JUST     Justify                                           *
+*----------------------------------------------------------------------*
+FORM sub_fill_fcat USING p_col TYPE sy-cucol
+                         p_tabnam TYPE slis_tabname
+                         p_fnam TYPE slis_fieldname
+                         p_text TYPE dd03p-scrtext_l
+                         p_just TYPE c.
+  wa_fcat-col_pos = p_col.
+  wa_fcat-tabname = p_tabnam.
+  wa_fcat-fieldname = p_fnam.
+  wa_fcat-seltext_l = p_text.
+  wa_fcat-just = p_just.
+  APPEND wa_fcat TO gt_fcat.
+  CLEAR wa_fcat.
+ENDFORM.                    "sub_fill_fcat
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_POP_events
+*&---------------------------------------------------------------------*
+* Subroutine to populate the events for ALV                            *
+*----------------------------------------------------------------------*
+FORM sub_pop_events.
+
+  CALL FUNCTION 'REUSE_ALV_EVENTS_GET'
+    EXPORTING
+      i_list_type     = 0
+    IMPORTING
+      et_events       = gt_events
+    EXCEPTIONS
+      list_type_wrong = 1
+      OTHERS          = 2.
+  IF sy-subrc = 0.
+
+    READ TABLE gt_events INTO wa_event WITH KEY name = slis_ev_top_of_page.
+    IF sy-subrc = 0.
+      wa_event-form = 'TOP_OF_PAGE'.
+      MODIFY gt_events FROM wa_event INDEX sy-tabix.
+    ENDIF.
+
+    READ TABLE gt_events INTO wa_event WITH KEY name = slis_ev_user_command.
+    IF sy-subrc = 0.
+      wa_event-form = 'USER_COMMAND'.
+      MODIFY gt_events FROM wa_event INDEX sy-tabix.
+    ENDIF.
+
+  ENDIF.
+
+ENDFORM.                    "sub_POP_events
+
+*&---------------------------------------------------------------------*
+*&      Form  top_of_page                                              *
+*&---------------------------------------------------------------------*
+*  Subroutine for TOP OF PAGE Event.                                   *
+*----------------------------------------------------------------------*
+FORM top_of_page.
+
+  DATA: l_utilper TYPE ukm_credit_limit,
+        l_amountd TYPE char30,
+        l_utpercent TYPE char25,
+        l_riskclass TYPE char45,
+        l_name TYPE char80.
+
+  CLEAR: l_utilper, l_amountd, l_utpercent, l_riskclass.
+
+* Display the customer details.
+  WRITE: 2 text-002.
+* Display Organization Name
+  WRITE: 25 wa_but000-name_org1.
+
+  FORMAT HOTSPOT ON.
+  WRITE: 65 text-003 COLOR 3.
+  FORMAT HOTSPOT OFF.
+* Display A/R Balance.
+  WRITE: 95 '$' NO-GAP, g_invoice LEFT-JUSTIFIED.
+
+
+  WRITE: /2 text-004.
+* Display the partner number
+  WRITE: 25 g_hiacc.
+  FORMAT HOTSPOT ON.
+  WRITE: 65 text-005 COLOR 3.
+  FORMAT HOTSPOT OFF.
+* Display the Open Order amount
+  WRITE: 95 '$' NO-GAP, g_openamt LEFT-JUSTIFIED.
+
+  WRITE: /2 text-006.
+* Display the Credit Limit
+  WRITE: 25 '$' NO-GAP, wa_ukm_sgm-credit_limit LEFT-JUSTIFIED.
+
+   g_opendel  = g_opendel - g_onhold .   "RG001
+
+* Begin of Change GS001
+  FORMAT HOTSPOT ON.
+*  WRITE: 65 TEXT-038 COLOR 3. "Display Open Deliveries Amount.     GS001-
+  WRITE: 65 text-038. "Display Open Deliveries Amount.              "GS001+
+  FORMAT HOTSPOT OFF.
+  WRITE: 95 '$' NO-GAP, g_opendel LEFT-JUSTIFIED.
+* End of Change GS001
+
+*  WRITE: 65 TEXT-007.          "GS001
+** Display the Onhold amount
+*  WRITE: 95 '$' NO-GAP, G_ONHOLD LEFT-JUSTIFIED.
+
+  WRITE: /2 text-008.
+* Display the Valid to date
+  WRITE: 25 wa_ukm_sgm-limit_valid_date.
+
+  WRITE: 65 text-007.
+* Display the Onhold amount
+  WRITE: 95 '$' NO-GAP, g_onhold LEFT-JUSTIFIED.
+
+*  WRITE: 65 TEXT-009. "GS001
+*  WRITE: 95 '$' NO-GAP, G_TOTEXP LEFT-JUSTIFIED.
+
+* Begin of CHG001+
+  WRITE: /2 text-014.
+* Display the follow up date
+  WRITE: 25 wa_ukm_sgm-follow_up_dt.
+* End of CHG001+
+
+* Begin of CHG001-
+*  WRITE: /2 text-010.
+* Display the Risk class and risk class text
+*  CONCATENATE wa_ukm_cms-risk_class wa_risktxt-risk_class_txt
+*  INTO l_riskclass SEPARATED BY '-'.
+*  WRITE: 25 l_riskclass.
+* End of CHG001-
+
+  WRITE: 65 text-009.
+  WRITE: 95 '$' NO-GAP, g_totexp LEFT-JUSTIFIED.
+
+*  WRITE: 65 TEXT-011.
+*  IF NOT WA_UKM_SGM-CREDIT_LIMIT EQ 0.
+*    L_UTILPER = ( G_TOTEXP / WA_UKM_SGM-CREDIT_LIMIT ) * 100.
+*    L_UTPERCENT = L_UTILPER.
+*    CONDENSE L_UTPERCENT.
+*    CONCATENATE L_UTPERCENT GC_PERCENT INTO L_UTPERCENT SEPARATED BY SPACE.
+** Display the utility percent
+*    WRITE: 95 L_UTPERCENT.
+*  ENDIF.
+
+
+* Begin of CHG001+
+  WRITE: /2 text-010.
+* Display the Risk class and risk class text
+  CONCATENATE wa_ukm_cms-risk_class wa_risktxt-risk_class_txt
+  INTO l_riskclass SEPARATED BY '-'.
+  WRITE: 25 l_riskclass.
+* End of CHG001+
+
+* Begin of CHG001-
+*  WRITE: /2 text-012.
+* Display the credit check rule
+*  WRITE: 25 wa_ukm_cms-check_rule.
+* End of CHG001-
+
+  WRITE: 65 text-011.
+  IF NOT wa_ukm_sgm-credit_limit EQ 0.
+    l_utilper = ( g_totexp / wa_ukm_sgm-credit_limit ) * 100.
+    l_utpercent = l_utilper.
+    CONDENSE l_utpercent.
+    CONCATENATE l_utpercent gc_percent INTO l_utpercent SEPARATED BY space.
+* Display the utility percent
+    WRITE: 95 l_utpercent.
+  ENDIF.
+*  WRITE: 65 TEXT-013.
+** Display the YTD Sales amount
+*  WRITE: 95  '$' NO-GAP, G_YTDSLS LEFT-JUSTIFIED.
+
+* Begin of CHG001-
+*  WRITE: /2 text-014.
+* Display the follow up date
+*  WRITE: 25 wa_ukm_sgm-follow_up_dt.
+* Begin of CHG001-
+
+* Begin of CHG001+
+  WRITE: /2 text-012.
+* Display the credit check rule
+  WRITE: 25 wa_ukm_cms-check_rule.
+* End of CHG001+
+
+  WRITE: 65 text-013.
+* Display the YTD Sales amount
+  WRITE: 95  '$' NO-GAP, g_ytdsls LEFT-JUSTIFIED.
+*  WRITE: 65 TEXT-015.
+** Display the the LY Sales amount
+*  WRITE: 95  '$' NO-GAP, G_LYSLS LEFT-JUSTIFIED.
+  WRITE: /2 text-016.
+* Display the Account Created On date
+  WRITE: 25 wa_but000-crdat.
+
+  WRITE: 65 text-015.
+** Display the the LY Sales amount
+  WRITE: 95  '$' NO-GAP, g_lysls LEFT-JUSTIFIED.
+*  WRITE: 65 TEXT-017.
+** Display the days in Arrear value
+*  WRITE: 95 G_ARRDAYS LEFT-JUSTIFIED.
+
+  WRITE: /2 text-028.
+* Display the Collection Analyst's name
+  CONCATENATE wa_crdtacc-name_first  wa_crdtacc-name_last INTO l_name
+  SEPARATED BY space.
+  WRITE: 25 l_name.
+
+  WRITE: 65 text-017.
+* Display the days in Arrear value
+  WRITE: 95 g_arrdays LEFT-JUSTIFIED.
+** Begin of Change GS001
+*  FORMAT HOTSPOT ON.
+*  WRITE: 65 TEXT-038 COLOR 3.
+*  FORMAT HOTSPOT OFF.
+** Display Open Deliveries Amount.
+*  WRITE: 95 '$' NO-GAP, G_OPENDEL LEFT-JUSTIFIED.
+** End of Change GS001
+  WRITE: /.
+ENDFORM.                  "top_of_page
+
+*&---------------------------------------------------------------------*
+*&      Form  USER_COMMAND
+*&---------------------------------------------------------------------*
+*  Subroutine to call transaction on user command                      *
+*----------------------------------------------------------------------*
+*      -->P_UCOMM     User Command                                    *
+*      -->P_SELFIELD  Selected line                                   *
+*----------------------------------------------------------------------*
+FORM user_command USING p_ucomm LIKE sy-ucomm
+                        p_selfield TYPE slis_selfield.
+
+  SET PARAMETER ID 'KUN' FIELD p_prtnr.
+  SET PARAMETER ID 'BPA' FIELD p_prtnr.
+  SET PARAMETER ID 'BUK' FIELD p_bukrs.
+  SET PARAMETER ID 'KKB' FIELD p_kkber.
+
+  IF p_selfield-value  = text-003.
+    CALL TRANSACTION 'FBL5N' AND SKIP FIRST SCREEN.
+  ENDIF.
+  IF p_selfield-value  = text-005.
+* Begin of Change AB001
+*    CALL TRANSACTION 'UKM_COMMITMENTS' AND SKIP FIRST SCREEN.
+    v_ind = ' '.
+    PERFORM build_zcre_expo.
+    CALL TRANSACTION 'ZUKM_COMMITMENTS' AND SKIP FIRST SCREEN.
+* End of Change AB001
+  ENDIF.
+* Begin of CHG002+
+  IF p_ucomm = 'UDM'.
+    CALL TRANSACTION 'UDM_BP' AND SKIP FIRST SCREEN.
+  ENDIF.
+  IF p_selfield-value  = text-038.
+* Begin of Change AB001
+    v_ind = '400'.
+    PERFORM build_zcre_expo.
+    CALL TRANSACTION 'ZUKM_COMMITMENTS' AND SKIP FIRST SCREEN.
+
+  ENDIF.
+* End of Change AB001
+* End of CHG002+
+ENDFORM.                    "USER_COMMAND
+
+
+
+*&---------------------------------------------------------------------*
+*&      Form  SUB_ACCUM_AGING
+*&---------------------------------------------------------------------*
+*  Subroutine to accumulate the aging summary details                  *
+*----------------------------------------------------------------------*
+
+FORM sub_accum_aging USING p_duedt TYPE bldat.
+
+  DATA: l_today TYPE sy-datum,
+         l_days_diff TYPE i.
+
+  l_today = sy-datum.
+
+* Accumulate the aging data for all the lower level accounts
+  l_days_diff = l_today - p_duedt.
+
+  ADD wa_bsid-dmbtr             TO wa_details-tot_ar.
+  IF l_days_diff < 1.
+    ADD wa_bsid-dmbtr          TO wa_details-not_due.
+
+  ELSEIF l_days_diff < 31.
+    ADD wa_bsid-dmbtr           TO wa_details-1_30ds.
+
+  ELSEIF l_days_diff < 61.
+    ADD wa_bsid-dmbtr          TO wa_details-31_60ds.
+
+  ELSEIF l_days_diff < 91.
+    ADD wa_bsid-dmbtr          TO wa_details-61_90ds.
+
+  ELSEIF l_days_diff > 90.
+*   ELSE.
+    ADD wa_bsid-dmbtr          TO wa_details-over90.
+
+  ENDIF.
+
+  wa_details-tpd = wa_details-1_30ds + wa_details-31_60ds +
+                   wa_details-61_90ds + wa_details-over90.
+
+ENDFORM.                    " SUB_ACCUM_AGING
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_pf_set
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+* Begin of CHG002+
+FORM sub_pf_set USING  extab TYPE slis_t_extab..
+
+  SET PF-STATUS 'ZCUSTOVRVW'.
+ENDFORM.                    "sub_pf_set
+* End of CHG002+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_hiac
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_get_hiac .
+  DATA : l_partner1 TYPE bu_partner .
+
+  SELECT SINGLE partner1
+  INTO l_partner1
+  FROM but050
+  WHERE partner2 = p_prtnr
+    AND reltyp = 'UKM001' .
+  IF sy-subrc = 0 .
+    p_prtnr = l_partner1 .
+  ENDIF.
+ENDFORM.                    " sub_get_hiac
+*&---------------------------------------------------------------------*
+*&      Form  SUB_get_hold1
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_get_hold1 .
+  DATA:   lv_onhold TYPE netwr_ap.
+
+  CLEAR g_onhold.
+
+  IF NOT g_rpartner[] IS INITIAL.
+    SELECT vbeln   "Sales Document
+           knkli   "Customer's account number with credit limit reference
+
+    INTO TABLE gt_vbak
+    FROM vbak      "Sales Document: Header Data
+    WHERE vbeln IN g_rvbeln
+    AND knkli IN g_rpartner.
+  ENDIF.
+
+  IF NOT gt_vbak[] IS INITIAL.
+    LOOP AT gt_vbak INTO wa_vbak.
+      PERFORM upload_table.
+      CALL FUNCTION 'SD_CREDIT_VALUE_ORDER'
+        EXPORTING
+          vbak   = xvbak
+        IMPORTING
+          amtbl  = xvbkred-kwkkb
+          kwkkg  = xvbkred-kwkkf
+        TABLES
+          xvbap  = xvbap
+          xvbapf = xvbapf
+          xvbfa  = xvbfa
+          xvbkd  = xvbkd
+          xvbup  = xvbup.
+      CLEAR lv_onhold.
+      MOVE xvbkred-kwkkb TO lv_onhold .
+      g_onhold = lv_onhold + g_onhold.
+    ENDLOOP.
+  ENDIF.
+
+ENDFORM.                    " SUB_get_hold1
+*&---------------------------------------------------------------------*
+*&      Form  upload_table
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM upload_table .
+  SELECT * FROM vbak APPENDING TABLE xvbak WHERE vbeln = wa_vbak-vbeln
+                                             ORDER BY PRIMARY KEY.
+*  SELECT * FROM VBEP APPENDING TABLE XVBEP WHERE VBELN = wa_vbak-VBELN
+*                                           ORDER BY PRIMARY KEY.
+
+  SELECT * FROM vbup APPENDING TABLE xvbup  WHERE vbeln = wa_vbak-vbeln
+                                       ORDER BY PRIMARY KEY.
+
+  SELECT * FROM vbfa APPENDING TABLE xvbfa  WHERE vbelv = wa_vbak-vbeln
+                                       ORDER BY PRIMARY KEY.
+
+ENDFORM.                    " upload_table
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_SELECTION_TABLE
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_selection_table1 .
+* Populate data for submit program
+  i_sel-selname = 'P_AUART'.
+  i_sel-kind = 'P'.
+  i_sel-low = 'OR'.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_VKORG'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = 'SO50'.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'S_AUDAT'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'BT'.
+  i_sel-low = '20080101'.
+  i_sel-high = sy-datum.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'S_KUNNR'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = p_prtnr.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_CONV'.
+  i_sel-kind = 'P'.
+  i_sel-low = ' '.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'R_ALL'.
+  i_sel-kind = 'P'.
+  i_sel-low = 'X'.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'R_USR'.
+  i_sel-kind = 'P'.
+  i_sel-low = 'X'.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_EXROR'.
+  i_sel-kind = 'P'.
+  i_sel-low = ' '.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_DWLD'.
+  i_sel-kind = 'P'.
+  i_sel-low = ' '.
+  APPEND i_sel.
+  CLEAR i_sel.
+
+ENDFORM.                    " BUILD_SELECTION_TABLE1
+*&---------------------------------------------------------------------*
+*&      Form  OPEN_ORDERS_WITH_DELIVERIES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM open_orders_with_deliveries .
+  SELECT vbeln FROM vbak INTO TABLE i_vbak
+               WHERE kunnr = p_prtnr.
+  SELECT vbeln posnr FROM vbap INTO TABLE i_vbap
+               FOR ALL ENTRIES IN i_vbak
+               WHERE vbeln = i_vbak-vbeln.
+  SELECT vbelv posnv vbeln posnn FROM vbfa INTO TABLE i_vbfa
+               FOR ALL ENTRIES IN i_vbap
+               WHERE  vbelv = i_vbap-vbeln
+               AND    posnv = i_vbap-posnr
+               AND    vbtyp_n = 'J'
+               AND    vbtyp_v = 'C'.
+
+ENDFORM.                    " OPEN_ORDERS_WITH_DELIVERIES
+*&---------------------------------------------------------------------*
+*&      Form  DISPLAY_OPEN_ORDERS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM display_open_orders .
+  REFRESH: gt_fcat1,gt_events1.
+  CLEAR: wa_fcat1,wa_event1.
+  DATA: lv_repid TYPE sy-repid,
+          lv_pform TYPE slis_formname.
+
+  lv_repid = sy-repid.
+  lv_pform = 'SUB_PF_SET'.
+
+  PERFORM fill_fieldcat USING:
+    '1' 'I_OPEN_ORDER1' 'VBELN' text-030 'C',
+    '2' 'I_OPEN_ORDER1' 'POSNR' text-031 'C',
+    '3' 'I_OPEN_ORDER1' 'AUART' text-032 'C',
+    '4' 'I_OPEN_ORDER1' 'MATNR' text-033 'C',
+    '5' 'I_OPEN_ORDER1' 'WERKS' text-034 'C',
+    '6' 'I_OPEN_ORDER1' 'PSTYV' text-035 'C',
+    '7' 'I_OPEN_ORDER1' 'OPQTY' text-036 'C',
+    '8' 'I_OPEN_ORDER1' 'NETPR' text-037 'C'.
+
+  PERFORM  alv_events.
+  CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+      i_callback_program       = lv_repid
+      i_callback_pf_status_set = lv_pform
+      is_layout                = wa_layout
+      it_fieldcat              = gt_fcat1
+      it_events                = gt_events1
+    TABLES
+      t_outtab                 = i_open_order1
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+ENDFORM.                    " DISPLAY_OPEN_ORDERS
+*&---------------------------------------------------------------------*
+*&      Form  FILL_FIELDCAT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM fill_fieldcat USING p_col TYPE sy-cucol
+                         p_tabnam TYPE slis_tabname
+                         p_fnam TYPE slis_fieldname
+                         p_text TYPE dd03p-scrtext_l
+                         p_just TYPE c.
+  wa_fcat1-col_pos = p_col.
+  wa_fcat1-tabname = p_tabnam.
+  wa_fcat1-fieldname = p_fnam.
+  wa_fcat1-seltext_l = p_text.
+  wa_fcat1-just = p_just.
+  APPEND wa_fcat1 TO gt_fcat1.
+  CLEAR wa_fcat1 .
+
+ENDFORM.                    " FILL_FIELDCAT
+*&---------------------------------------------------------------------*
+*&      Form  ALV_EVENTS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM alv_events .
+  CALL FUNCTION 'REUSE_ALV_EVENTS_GET'
+    EXPORTING
+      i_list_type     = 0
+    IMPORTING
+      et_events       = gt_events1
+    EXCEPTIONS
+      list_type_wrong = 1
+      OTHERS          = 2.
+
+  READ TABLE gt_events1 INTO wa_event1 WITH KEY name = slis_ev_user_command.
+  IF sy-subrc = 0.
+    wa_event1-form = 'ORDER_DETAILS'.
+    MODIFY gt_events1 FROM wa_event1 INDEX sy-tabix.
+  ENDIF.
+ENDFORM.                    " ALV_EVENTS
+
+*&---------------------------------------------------------------------*
+*&      Form  ORDER_DETAILS
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->P_UCOMM    text
+*      -->P_SELFIELD text
+*----------------------------------------------------------------------*
+FORM order_details USING p_ucomm LIKE sy-ucomm
+                         p_selfield TYPE slis_selfield.
+  IF p_selfield-fieldname = 'VBELN'.
+    SET PARAMETER ID 'AUN' FIELD p_selfield-value.
+    CALL TRANSACTION 'VA03' AND SKIP FIRST SCREEN.
+  ENDIF.
+  IF p_selfield-fieldname = 'DELNO'.
+    SET PARAMETER ID 'VL' FIELD p_selfield-value.
+    CALL TRANSACTION 'VL03' AND SKIP FIRST SCREEN.
+  ENDIF.
+ENDFORM.                    "ORDER_DETAILS
+*&---------------------------------------------------------------------*
+*&      Form  DISPLAY_OPEN_DELIVERIES
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM display_open_deliveries .
+  REFRESH: gt_fcat1,gt_events1.
+  CLEAR: wa_fcat1,wa_event1.
+  DATA: lv_repid TYPE sy-repid,
+          lv_pform TYPE slis_formname.
+
+  lv_repid = sy-repid.
+  lv_pform = 'SUB_PF_SET'.
+
+  PERFORM fill_fieldcat USING:
+    '1' 'I_OPEN_DEL' 'VBELN' text-030 'C',
+    '2' 'I_OPEN_DEL' 'POSNR' text-031 'C',
+    '3' 'I_OPEN_DEL' 'DELNO' text-039 'C',
+    '4' 'I_OPEN_DEL' 'DELITM' text-040 'C',
+    '5' 'I_OPEN_DEL' 'AUART' text-032 'C',
+    '6' 'I_OPEN_DEL' 'MATNR' text-033 'C',
+    '7' 'I_OPEN_DEL' 'WERKS' text-034 'C',
+    '8' 'I_OPEN_DEL' 'PSTYV' text-035 'C',
+    '9' 'I_OPEN_DEL' 'OPQTY' text-036 'C',
+    '10' 'I_OPEN_DEL' 'NETPR' text-037 'C'.
+
+  PERFORM  alv_events.
+  CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+      i_callback_program       = lv_repid
+      i_callback_pf_status_set = lv_pform
+      is_layout                = wa_layout
+      it_fieldcat              = gt_fcat1
+      it_events                = gt_events1
+    TABLES
+      t_outtab                 = i_open_del
+    EXCEPTIONS
+      program_error            = 1
+      OTHERS                   = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+ENDFORM.                    " DISPLAY_OPEN_DELIVERIES
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_SELECTION_TABLE2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM build_selection_table2 .
+* Populate data for submit program
+  i_sel-selname = 'S_PARTNR'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = p_prtnr.
+  APPEND i_sel.
+  CLEAR i_sel.
+  SELECT SINGLE credit_sgmnt FROM ukm_kkber2sgm
+         INTO v_segmt
+         WHERE kkber = p_kkber.
+  i_sel-selname = 'S_SEGMT'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = v_segmt.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_SHOW'.
+  i_sel-kind = 'P'.
+  i_sel-low = ' '.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_KKBER'.
+  i_sel-kind = 'P'.
+  i_sel-low = p_kkber.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_BUKRS'.
+  i_sel-kind = 'P'.
+  i_sel-low = p_bukrs.
+  APPEND i_sel.
+  CLEAR i_sel.
+*  EXPORT i_sel TO MEMORY ID 'ZCREX'.
+
+ENDFORM.                    " BUILD_SELECTION_TABLE2
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_ZCRE_EXPO
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_zcre_expo .
+
+  CLEAR i_sel.
+  REFRESH i_sel.
+  i_sel-selname = 'S_PARTNR'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = p_prtnr.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'S_SEGMT'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = v_segmt.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'S_COMTYP'.
+  i_sel-kind = 'S'.
+  i_sel-sign = 'I'.
+  i_sel-option = 'EQ'.
+  i_sel-low = v_ind.
+  APPEND i_sel.
+  CLEAR i_sel.
+  i_sel-selname = 'P_SHOW'.
+  i_sel-kind = 'P'.
+  i_sel-low = 'X'.
+  APPEND i_sel.
+  CLEAR i_sel.
+
+  EXPORT i_sel TO MEMORY ID 'ZCREX'.
+ENDFORM.                    " BUILD_ZCRE_EXPO
+
+*** Adding by SA102+
+************************************************************************
+*&      Form  sub_get_hold2
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sub_get_hold2 .
+
+  RANGES: gbstk FOR vbuk-gbstk.
+  MOVE 'I'    TO gbstk-sign.
+  MOVE 'EQ'   TO gbstk-option.
+  MOVE 'A'    TO gbstk-low.
+  APPEND gbstk.
+  MOVE 'I'    TO gbstk-sign.
+  MOVE 'EQ'   TO gbstk-option.
+  MOVE 'B'    TO gbstk-low.
+  APPEND gbstk.
+
+  SUBMIT zrvkred01_pcec_new
+                        WITH knkli IN g_rpartner
+                        WITH cmgst EQ 'B'
+                        WITH gbstk IN gbstk
+                        WITH order EQ 'X'
+                        WITH deliv EQ 'X'
+                        WITH callmode EQ 'X'
+                        WITH code EQ 'VKM1'
+                        AND RETURN.
+
+  DATA:  v_on_hold(30) TYPE c.
+  GET PARAMETER ID  'HOLD' FIELD v_on_hold.
+  CONDENSE v_on_hold.
+  g_onhold = v_on_hold.
+
+ENDFORM.                    " sub_get_hold2
+
+*&---------------------------------------------------------------------*
+*&      Form  sub_get_ukm_tots1
+*&---------------------------------------------------------------------*
+*  Subroutine to retrieve data from table UKM_TOTALS
+*----------------------------------------------------------------------*
+FORM sub_get_ukm_tots1.
+
+  DATA: lt_ukm_totals TYPE STANDARD TABLE OF ukm_totals INITIAL SIZE 0,
+        wa_ukm_totals TYPE ukm_totals.
+
+  IF NOT wa_but000 IS INITIAL.
+* Begin of AB001
+*    CALL FUNCTION 'UKM_COMMTS_READ'
+*      EXPORTING
+*        I_PARTNER     = WA_BUT000-PARTNER
+*        I_SEGMENT     = G_CRDTSGM
+*      TABLES
+*        ET_UKM_TOTALS = LT_UKM_TOTALS.
+*    IF SY-SUBRC = 0.
+* Retrieve the open order amount
+    CLEAR: wa_ukm_totals.
+    CLEAR: g_openamt , g_opendel , g_acamt , g_invoice.
+    PERFORM build_selection_table2.
+    SUBMIT zfscm_credit_expo_n
+         WITH SELECTION-TABLE i_sel
+         AND RETURN.
+    IMPORT gt_totalsdisplay FROM MEMORY ID  'ZFCREX'.
+
+    LOOP AT gt_totalsdisplay INTO wa_totalsdisplay.
+      CASE wa_totalsdisplay-comm_typ.
+        WHEN gc_hunrd.
+          g_openamt = g_openamt + wa_totalsdisplay-amount.
+        WHEN gc_400.
+          g_opendel = g_opendel + wa_totalsdisplay-amount.
+        WHEN gc_500.
+          g_acamt  = g_acamt  + wa_totalsdisplay-amount.
+        WHEN OTHERS.
+          g_invoice = g_invoice + wa_totalsdisplay-amount.
+      ENDCASE.
+    ENDLOOP.
+* Calculate the total credit exposure
+    g_totexp = g_openamt + g_opendel + g_acamt + g_invoice.
+*PERFORM OPEN_ORDERS_WITH_DELIVERIES.
+
+
+*PERFORM BUILD_SELECTION_TABLE2.
+*    SUBMIT zr2k9_openorder_report
+*           WITH SELECTION-TABLE I_SEL
+*           EXPORTING LIST TO MEMORY
+*           AND RETURN.
+*    IMPORT I_OPEN2[] FROM MEMORY ID 'ZOPOR'.
+*
+*    SELECT VBELN POSNR NETPR FROM VBAP INTO TABLE I_OPEN_ORDER
+*      FOR ALL ENTRIES IN I_OPEN1
+*      WHERE VBELN = I_OPEN1-VBELN AND
+*            POSNR = I_OPEN1-POSNR.
+*LOOP AT I_OPEN1.
+*    READ TABLE I_VBFA WITH KEY VBELV = I_OPEN1-VBELN
+*                               POSNV = I_OPEN1-POSNR.
+*       IF SY-SUBRC = 0.
+*          READ TABLE I_OPEN_ORDER WITH KEY VBELN = I_OPEN1-VBELN
+*                                    POSNR = I_OPEN1-POSNR.
+*          IF SY-SUBRC = 0.
+*            READ TABLE I_OPEN2 WITH KEY VBELN = I_OPEN2-VBELN
+*                                    POSNR = I_OPEN2-POSNR.
+*            IF SY-SUBRC = 0.
+*              IF I_OPEN2-CNFQTY NE I_OPEN2-DELQTY.
+*                I_OPEN1-OPQTY = I_OPEN2-CNFQTY - I_OPEN2-DELVRD.
+*                G_OPENAMT = G_OPENAMT + ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*                MOVE-CORRESPONDING I_OPEN TO I_OPEN_ORDER1.
+*                I_OPEN_ORDER1-NETPR = ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*                APPEND I_OPEN_ORDER1.
+*                CLEAR I_OPEN_ORDER.
+*                I_OPEN1-OPQTY = I_OPEN2-DELVRD.
+*                I_OPEN1-OPQTY = I_OPEN2-CONFQTY - I_OPEN2-DELQTY.
+*                G_OPENDEL = G_OPENDEL + ( I_OPEN_ORDER-NETPR * I_OPEN1-OPQTY ).
+*                MOVE-CORRESPONDING I_OPEN1 TO I_OPEN_DEL.
+*                I_OPEN_DEL-DELNO = I_VBFA-VBELN.
+*                I_OPEN_DEL-DELITM = I_VBFA-POSNN.
+*                I_OPEN_DEL-NETPR = ( I_OPEN_ORDER-NETPR * I_OPEN1-OPQTY ).
+*                APPEND I_OPEN_DEL.
+*                CLEAR I_OPEN_ORDER.
+*              ENDIF.
+*            ENDIF.
+*          ENDIF.
+*
+*       ELSE.
+*          READ TABLE I_OPEN_ORDER WITH KEY VBELN = I_OPEN1-VBELN
+*                                    POSNR = I_OPEN1-POSNR.
+*          IF SY-SUBRC = 0.
+*            G_OPENAMT = G_OPENAMT + ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*            MOVE-CORRESPONDING I_OPEN TO I_OPEN_ORDER1.
+*            I_OPEN_ORDER1-NETPR = ( I_OPEN_ORDER-NETPR * I_OPEN-OPQTY ).
+*            APPEND I_OPEN_ORDER1.
+*            CLEAR I_OPEN_ORDER.
+*          ENDIF.
+*       ENDIF.
+*ENDLOOP.
+*   G_TOTEXP = G_OPENAMT + G_OPENDEL.
+
+* End of AB001
+  ENDIF.
+ENDFORM.                    "sub_get_ukm_tots1
+* End Adding by SA102+
+*&---------------------------------------------------------------------*
+*&      Form  F_CALCULATE_OPEN_ORDER_DEL_BIL
+*&---------------------------------------------------------------------*
+* This suroutine is used to calculate the amounts wth respect to open
+* orders, open deliveries and open billing docs
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM f_calculate_open_order_del_bil .
+
+  DATA : l_odel TYPE mc_olikw,
+         l_obil TYPE mc_ofakw,
+         l_oord TYPE mc_oeikw.
+
+*Get the open amounts total using this function module
+  CALL FUNCTION 'SD_CREDIT_EXPOSURE'
+    EXPORTING
+     flag_open_delivery         = 'X'
+     flag_open_invoice          = 'X'
+     flag_open_order            = 'X'
+     horizon_date               = '99991231'
+      kkber                      = p_kkber
+      knkli                      = p_prtnr
+*   T014                       = ' '
+   IMPORTING
+     open_delivery              = l_odel
+     open_invoice               = l_obil
+     open_order                 = l_oord.
+
+  g_openamt = l_oord.
+  g_opendel = l_odel.
+  g_acamt = l_obil.
+
+ENDFORM.                    " F_CALCULATE_OPEN_ORDER_DEL_BIL
