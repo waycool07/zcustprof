@@ -1,0 +1,2250 @@
+*--------------------------------------------------------------------*
+* DATABASE PROGRAM OF LOGICAL DATABASE KMV
+*--------------------------------------------------------------------*
+*
+* The automatically generated subroutines (FORMs) are called by
+* system routines. Therefore their names must not be changed!!!
+*
+* If the source code is automatically generated,
+* please perform the following steps:
+* 1. Replace ? by suitable ABAP statements.
+* 2. Activate ABAP statements (delete stars).
+* 3. Save source code.
+* 4. Check syntax of database program.
+*    SELECT-OPTIONS and PARAMETERS will be checked automatically.
+*--------------------------------------------------------------------*
+
+*--------------------------------------------------------------------*
+* Performance notes
+*--------------------------------------------------------------------*
+* General information about the use of logical databases is contained
+* in the extended help information of transaction SE36.
+* Please consider in particular the following aspects:
+* 1. Use of internal tables:
+*    SELECT * FROM table INTO TABLE i_table WHERE ... .
+*    LOOP AT i_table.
+*      MOVE-CORRESPONDING table TO i_table.
+*      PUT table.
+*    ENDLOOP.
+* 2. Use of OPEN/FETCH CURSOR for nested structures.
+* 3. Use of dynamic selections to enable further selection criteria
+*    (cf. documentation of SELECTION-SCREEN DYNAMIC SELECTIONS).
+* 4. Authority checks already at PAI of selection screen.
+*--------------------------------------------------------------------*
+
+PROGRAM SAPDBKMV DEFINING DATABASE KMV
+                  MESSAGE-ID VM.
+TABLES: VBUK,                          " Belegkopf
+        VBKD,                          " kaufm. Daten
+        VBAK,                          " Verkaufsbelegkopf
+        VBAP,                          " Verkaufsbelegposition
+        VBFA,                          " Flusstabelle
+        VBPA,                          " Partner
+        VBUP,                          " Status Position
+        VBADR,                         " Adresse
+        VBEP,                          " Verkaufsbelegeinteilung
+        LIKP,                          " Lieferungskopf
+        VBKRED,                        " Arbeitstabelle Kreditlimit
+        VBKREDET,                      " Detaildaten         P30K028860
+        KNKK.                          " Kunde Kreditlimit.
+
+DATA: FLG_KKL.                                              "P30K028860
+DATA: CREDIT_STAFO LIKE T014-STAFO.                         "P30K028860
+DATA: CREDIT_PERIV LIKE T014-PERIV.                         "P30K028860
+DATA: SAV_BUKRS    LIKE T001-BUKRS.                         "P30K028860
+DATA: SAV_HORIZON TYPE D.                                   "P30K028860
+DATA: SAV_DATE_FIRST TYPE D.                                "P30K028860
+TABLES: VBRKVB, VBRPVB, T001, TVAK, T691F.                  "P30K028860
+TABLES: TVLK.
+
+TABLES: RSD2X.
+
+RANGES: XVBELN FOR VBUK-VBELN,         " Belege aus Matchcode
+        YVBELN FOR VBUK-VBELN,         " Stückelung Matchcode.
+        RPLNR  FOR VBAK-RPLNR.         " CCard Ratenpaln
+
+DATA: BEGIN OF SAV_XVBEP OCCURS 0.
+        INCLUDE STRUCTURE VBEPVB.
+DATA: END   OF SAV_XVBEP.
+DATA: BEGIN OF SAV_XVBAP OCCURS 0.
+        INCLUDE STRUCTURE VBAPVB.
+DATA: END   OF SAV_XVBAP.
+
+DATA:   BEGIN OF VBEP_KEY,
+        MANDT LIKE SY-MANDT,
+        VBELN LIKE VBAK-VBELN,
+        POSNR LIKE VBAP-POSNR,
+        ETENR LIKE VBEP-ETENR,
+        END   OF VBEP_KEY.
+
+DATA:   BEGIN OF XVBUK OCCURS 100.     " Arbeitstabelle Belegköpfe
+        INCLUDE STRUCTURE VBUKVB.
+DATA:   END   OF XVBUK.
+
+DATA:   BEGIN OF XVBAK OCCURS 100.     " Arbeitstabelle Verkaufsbeleg
+        INCLUDE STRUCTURE VBAK.
+DATA:   END   OF XVBAK.
+
+DATA:   BEGIN OF XVBPA OCCURS 100.     " Arbeitstabelle Partner
+        INCLUDE STRUCTURE VBPA.
+DATA:   END   OF XVBPA.
+
+DATA:   BEGIN OF XFPLA OCCURS 100.     " Arbeitstabelle Zahlungskarten
+        INCLUDE STRUCTURE FPLAVB.
+DATA:   END   OF XFPLA.
+
+DATA:   BEGIN OF XLIKP OCCURS 100.     " Arbeitstabelle Lieferung
+        INCLUDE STRUCTURE LIKP.
+DATA:   END   OF XLIKP.
+
+DATA:   BEGIN OF XVBAP OCCURS 100.     " Arbeitstabelle Position Verkauf
+        INCLUDE STRUCTURE VBAPVB.
+DATA:   END   OF XVBAP.
+
+DATA:   BEGIN OF XVBAPF OCCURS 1.      " Arbeitstabelle Fluss
+        INCLUDE STRUCTURE VBAPF.
+DATA:   END   OF XVBAPF.
+
+DATA:   BEGIN OF XVBKD  OCCURS 10.     " Arbeitstabelle Kaufm. Daten
+        INCLUDE STRUCTURE VBKDVB.
+DATA:   END   OF XVBKD.
+
+DATA:   BEGIN OF XVBEP OCCURS 10.      " Arbeitstabelle Einteil. Verkauf
+        INCLUDE STRUCTURE VBEPVB.
+DATA:   END   OF XVBEP.
+
+DATA:   BEGIN OF YVBEP OCCURS 100.     " Arbeitstabelle Einteil. Kapsel
+        INCLUDE STRUCTURE VBEPVB.
+DATA:   END   OF YVBEP.
+
+DATA:   BEGIN OF XVBKRED OCCURS 100.   " Arbeitstabelle Kreditlimit
+        INCLUDE STRUCTURE VBKRED.
+DATA:   END   OF XVBKRED.
+
+DATA:   BEGIN OF XVBKREDET OCCURS 100. "Detaildaten          P30K028660
+        INCLUDE STRUCTURE VBKREDET.                         "P30K028660
+DATA:   END   OF XVBKREDET.                                 "P30K028660
+
+DATA:   BEGIN OF XVBFA OCCURS 0.       " Belegfluss
+        INCLUDE STRUCTURE VBFAVB.
+DATA:   END   OF XVBFA.
+
+DATA:   BEGIN OF XVBUP OCCURS 10.      " Positionsstatus
+        INCLUDE STRUCTURE VBUPVB.
+DATA:   END   OF XVBUP.
+
+DATA:   BEGIN OF LVBAK OCCURS 1.       " Auftrag für Lieferung
+        INCLUDE STRUCTURE VBAK.
+DATA:   END   OF LVBAK.
+
+DATA:   BEGIN OF LVBAP OCCURS 1.       " Auftragsposition für Lieferung
+        INCLUDE STRUCTURE VBAPVB.
+DATA:   END   OF LVBAP.
+
+
+DATA:   BEGIN OF LLIPS OCCURS 1.       " Lieferposition   für Lieferung
+        INCLUDE STRUCTURE LIPSVB.
+DATA:   END   OF LLIPS.
+
+DATA:   BEGIN OF LVBKD OCCURS 1.       " Kaufmännischen für Lieferung
+        INCLUDE STRUCTURE VBKDVB.
+DATA:   END   OF LVBKD.
+
+DATA:   BEGIN OF KUNDE OCCURS 100,     " Arbeitstabelle Kunde
+        KNKLI LIKE VBKRED-KNKLI,
+        NAME1 LIKE VBKRED-NAME1,
+        ORT01 LIKE VBKRED-ORT01,
+        LAND  LIKE VBKRED-LAND,
+        ADRNR LIKE VBKRED-ADRNR,
+        END   OF KUNDE.
+
+DATA:   BEGIN OF XKNKK OCCURS 10.      " Arbeitstabelle Kreditlimitber
+        INCLUDE STRUCTURE KNKK.
+DATA:   OLIKW LIKE VBKRED-OLIKW,
+        OFAKW LIKE VBKRED-OFAKW,
+        OEIKW LIKE VBKRED-OEIKW,
+        KLPRZ LIKE VBKRED-KLPRZ.
+DATA:   END   OF XKNKK.
+
+DATA:   BEGIN OF BELEG_KEY,            " Zugriff auf interne Tabellen
+        MANDT LIKE SY-MANDT,
+        VBELN LIKE VBAK-VBELN,
+        END   OF BELEG_KEY.
+
+DATA:   BEGIN OF POSITION_KEY,         " Zugriff auf interne Tabellen
+        MANDT LIKE SY-MANDT,
+        VBELN LIKE VBAK-VBELN,
+        POSNR LIKE VBAP-POSNR,
+        END   OF POSITION_KEY.
+
+DATA:   TABLE_SIZE LIKE SY-TFILL.      " Blockgroesse für Selektion.
+
+DATA:   VERKAUFSBELEG LIKE VBUK-VBOBJ VALUE 'A',
+        LIEFERUNG     LIKE VBUK-VBOBJ VALUE 'L'.
+
+* Zugriff auf Kreditdaten über VBAK/LIKP oder VBUK/Matchcode
+DATA:   FLG_TABELLE(4),
+        CON_VBAK LIKE FLG_TABELLE VALUE 'VBAK',
+        CON_VBUK LIKE FLG_TABELLE VALUE 'VBUK',
+        CON_MACO LIKE FLG_TABELLE VALUE 'MACO'.
+
+DATA:   RC LIKE SY-SUBRC.
+DATA:   AUTH_VBUK_RC LIKE SY-SUBRC.
+DATA:   AUTH_KNKK_RC LIKE SY-SUBRC.
+DATA:   AUTH_MESSAGE_VBUK_SENT.
+DATA:   AUTH_MESSAGE_KNKK_SENT.
+DATA: BEGIN OF MESSAGE_KNKK_VAR1,
+        KKBER LIKE VBKRED-KKBER,
+        FIL1,
+        SBGRP LIKE VBKRED-SBGRP,
+        FIL2,
+        CTLPC LIKE VBKRED-CTLPC,
+      END   OF MESSAGE_KNKK_VAR1.
+
+DATA: BEGIN OF POSITIONS_KEY,
+        MANDT LIKE VBAP-MANDT,
+        VBELN LIKE VBAP-VBELN,
+        POSNR LIKE VBAP-POSNR,
+      END   OF POSITIONS_KEY.
+INCLUDE RMCSSU01.
+INCLUDE RMCSSU08.
+TABLES: TMC4, S066, S067, MCCONTROL.
+DATA: BEGIN OF DVBAK OCCURS 50.
+        INCLUDE STRUCTURE VBAK.
+DATA: END OF DVBAK.
+DATA: BEGIN OF DVBAP OCCURS 200.
+        INCLUDE STRUCTURE VBAPVB.
+DATA: END OF DVBAP.
+DATA: BEGIN OF DVBEP OCCURS 200.
+        INCLUDE STRUCTURE VBEPVB.
+DATA: END OF DVBEP.
+DATA: BEGIN OF DVBPA OCCURS 200.
+        INCLUDE STRUCTURE VBPAVB.
+DATA: END OF DVBPA.
+DATA: BEGIN OF DVBUK OCCURS 50.
+        INCLUDE STRUCTURE VBUKVB.
+DATA: END OF DVBUK.
+DATA: BEGIN OF DVBUP OCCURS 200.
+        INCLUDE STRUCTURE VBUPVB.
+DATA: END OF DVBUP.
+DATA: BEGIN OF DVBKD OCCURS 200.
+        INCLUDE STRUCTURE VBKDVB.
+DATA: END OF DVBKD.
+DATA: BEGIN OF DVBFA OCCURS 0.
+        INCLUDE STRUCTURE VBFAVB.
+DATA: END OF DVBFA.
+DATA: BEGIN OF DVBAPF OCCURS 50.
+        INCLUDE STRUCTURE VBAPF.
+DATA: END OF DVBAPF.
+* Dummystrukturen
+DATA: BEGIN OF EVBAK OCCURS 1.
+        INCLUDE STRUCTURE VBAK.
+DATA: END OF EVBAK.
+DATA: BEGIN OF EVBAP OCCURS 1.
+        INCLUDE STRUCTURE VBAPVB.
+DATA: END OF EVBAP.
+DATA: BEGIN OF EVBEP OCCURS 1.
+        INCLUDE STRUCTURE VBEPVB.
+DATA: END OF EVBEP.
+DATA: BEGIN OF EVBFA OCCURS 0.
+        INCLUDE STRUCTURE VBFAVB.
+DATA: END OF EVBFA.
+DATA: BEGIN OF EVBKD OCCURS 1.
+        INCLUDE STRUCTURE VBKDVB.
+DATA: END OF EVBKD.
+DATA: BEGIN OF EVBPA OCCURS 1.
+        INCLUDE STRUCTURE VBPAVB.
+DATA: END OF EVBPA.
+DATA: BEGIN OF EVBUK OCCURS 1.
+        INCLUDE STRUCTURE VBUKVB.
+DATA: END OF EVBUK.
+DATA: BEGIN OF EVBUP OCCURS 1.
+        INCLUDE STRUCTURE VBUPVB.
+DATA: END OF EVBUP.
+DATA:   BEGIN OF DKOMV OCCURS 0.
+        INCLUDE STRUCTURE KOMV.
+DATA:   END   OF DKOMV.
+DATA:   BEGIN OF DLIKP OCCURS 0.
+        INCLUDE STRUCTURE LIKPVB.
+DATA:   END   OF DLIKP.
+DATA:   BEGIN OF DLIPS OCCURS 0.
+        INCLUDE STRUCTURE LIPSVB.
+DATA:   END   OF DLIPS.
+DATA:   BEGIN OF ELIPS OCCURS 0.
+        INCLUDE STRUCTURE LIPSVB.
+DATA:   END   OF ELIPS.
+DATA: CON_UPDKZ_INSERT VALUE 'I',
+      CON_TRTYP_VERAE  VALUE 'V'.
+
+* Select-option für die Info-Strukturen
+RANGES: MCINF FOR TMC4-MCINF.
+
+INCLUDE DBKMVT02.                      " Kunden - Datendekleration
+
+**********************************************************************
+* !!! PLEASE DO NOT CHANGE MANUALLY (BEGIN OF BLOCK) !!!!!!!!!!!!!!! *
+*--------------------------------------------------------------------*
+* Data structures for matchcode selection                            *
+* !!! PLEASE DO NOT CHANGE MANUALLY (END OF BLOCK) !!!!!!!!!!!!!!!!! *
+**********************************************************************
+
+*--------------------------------------------------------------------*
+* BEFORE_EVENT will be called before event EVENT
+* Possible values for EVENT: 'START-OF-SELECTION'
+*--------------------------------------------------------------------*
+* FORM BEFORE_EVENT USING EVENT.
+*   CASE EVENT.
+*     WHEN 'START-OF-SELECTION'
+*
+*   ENDCASE.
+* ENDFORM.                             "BEFORE_EVENT
+
+*--------------------------------------------------------------------*
+* AFTER_EVENT will be called after event EVENT
+* Possible values for EVENT: 'END-OF-SELECTION'
+*--------------------------------------------------------------------*
+* FORM AFTER_EVENT USING EVENT.
+*   CASE EVENT.
+*     WHEN 'END-OF-SELECTION'
+*
+*   ENDCASE.
+* ENDFORM.                             "AFTER_EVENT
+
+*--------------------------------------------------------------------*
+* Initialize selection screen (processed before PBO)
+*--------------------------------------------------------------------*
+FORM INIT.
+
+
+ENDFORM.                               "INIT.
+
+*--------------------------------------------------------------------*
+* PBO of selection screen (processed always after ENTER)
+*--------------------------------------------------------------------*
+FORM PBO.
+
+ENDFORM.                               "PBO.
+
+*--------------------------------------------------------------------*
+* PAI of selection screen (processed always after ENTER)
+*--------------------------------------------------------------------*
+FORM PAI USING FNAME MARK.
+
+  CASE FNAME.
+*   WHEN 'KKBER   '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN 'KNKLI   '.
+*   WHEN 'CTLPC   '.
+*   WHEN 'SBGRP   '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN 'GRUPP   '.
+*   WHEN 'VBELN   '.
+*   WHEN 'VBELP   '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN 'CMGST   '.
+*   WHEN 'CMNGV   '.
+*   WHEN 'CMNUP   '.
+*   WHEN 'ORDER   '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN 'DELIV   '.
+*   WHEN '        '.
+*   WHEN '        '.
+*   WHEN 'POSI    '.
+    WHEN '*'.
+      GET PARAMETER ID 'KKL' FIELD FLG_KKL.
+  ENDCASE.
+* Fill the table for excluding documents without payment cards CCARD
+  IF CARDMODE = 'X'.
+    REFRESH RPLNR.
+    RPLNR-SIGN   = 'I'.
+    RPLNR-OPTION = 'NE'.
+    RPLNR-LOW    = ' '.
+    APPEND RPLNR.
+  ENDIF.
+
+ENDFORM.                                                    "PAI
+*---------------------------------------------------------------------*
+* FORM LDB_PROCESS_INIT                                               *
+*---------------------------------------------------------------------*
+FORM ldb_process_init CHANGING ldb_subrc like sy-subrc.
+* initialize all global data declarations to make sure
+* that the log. database can be processed multiple via
+* function module 'LDB_PROCESS'
+  CLEAR:
+    kkber, knkli, ctlpc, sbgrp, grupp, vbeln, gbstk, cmgst, cmngv,
+    cmnup, vkorg, vtweg, spart, vkbur, vkgrp, ernam, aust1, aust2,
+    aust3, aust5, order, deliv, cardmode.
+
+  REFRESH:
+    kkber, knkli, ctlpc, sbgrp, grupp, vbeln, gbstk, cmgst, cmngv,
+    cmnup, vkorg, vtweg, spart, vkbur, vkgrp, ernam, aust1, aust2,
+    aust3, aust5.
+
+  CLEAR:
+    VBUK, VBKD, VBAK, VBAP, VBFA, VBPA, VBUP, VBADR, VBEP, LIKP,
+    VBKRED, VBKREDET, KNKK.
+
+  CLEAR:
+    FLG_KKL, CREDIT_STAFO, CREDIT_PERIV, SAV_BUKRS, SAV_HORIZON,
+    SAV_DATE_FIRST.
+
+  CLEAR:
+    VBRKVB, VBRPVB, T001, TVAK, T691F, TVLK, RSD2X.
+
+  CLEAR:
+    XVBELN, YVBELN, RPLNR.
+
+  REFRESH:
+    XVBELN, YVBELN, RPLNR.
+
+  CLEAR:
+    SAV_XVBEP, SAV_XVBAP.
+
+  REFRESH:
+    SAV_XVBEP, SAV_XVBAP.
+
+  CLEAR:
+    VBEP_KEY.
+
+  CLEAR:
+    XVBUK, XVBAK, XVBPA, XFPLA, XLIKP, XVBAP, XVBAP, XVBKD, XVBEP,
+    YVBEP, XVBKRED, XVBKREDET, XVBFA, XVBUP, LVBAK, LVBAP, LLIPS, LVBKD,
+    KUNDE, XKNKK.
+
+  REFRESH:
+    XVBUK, XVBAK, XVBPA, XFPLA, XLIKP, XVBAP, XVBAP, XVBKD, XVBEP,
+    YVBEP, XVBKRED, XVBKREDET, XVBFA, XVBUP, LVBAK, LVBAP, LLIPS, LVBKD,
+    KUNDE, XKNKK.
+
+  CLEAR:
+    BELEG_KEY, POSITION_KEY, TABLE_SIZE, FLG_TABELLE, RC, AUTH_VBUK_RC,
+    AUTH_KNKK_RC, AUTH_MESSAGE_VBUK_SENT, AUTH_MESSAGE_KNKK_SENT,
+    MESSAGE_KNKK_VAR1, POSITIONS_KEY.
+
+  CLEAR:
+    sav_subrc, sav_tabix, flg_suhie, flg_logging,
+    flg_verbuchung, flg_v1, flg_v2, flg_d, flg_b, flg_bw, flg_cm,
+    inst_badi_sd_to_fm.
+
+  CLEAR:
+    prog_tab.
+
+  REFRESH:
+    prog_tab.
+
+  CLEAR:
+    prog_tab.
+  REFRESH:
+    prog_tab.
+
+  CLEAR:
+    int_stafos, fmtab.
+
+  REFRESH:
+    int_stafos, fmtab.
+
+  CLEAR:
+    tmcb, mcaktiv, t001w, t001k, t691k, TMC4, S066, S067, MCCONTROL.
+
+  CLEAR:
+    DVBAK, DVBAP,DVBEP, DVBPA, DVBUK, DVBUP, DVBKD, DVBFA, DVBAPF,
+    EVBAK, EVBAP, EVBEP, EVBFA, EVBKD, EVBPA, EVBUK,EVBUP, DKOMV,
+    DLIKP,DLIPS, ELIPS.
+
+  REFRESH:
+    DVBAK, DVBAP,DVBEP, DVBPA, DVBUK, DVBUP, DVBKD, DVBFA, DVBAPF,
+    EVBAK, EVBAP, EVBEP, EVBFA, EVBKD, EVBPA, EVBUK,EVBUP, DKOMV,
+    DLIKP,DLIPS, ELIPS.
+
+  CLEAR:
+    MCINF.
+
+  REFRESH:
+    MCINF.
+
+  ldb_subrc = 0.
+
+ENDFORM.
+*---------------------------------------------------------------------*
+*       FORM AUTHORITY_CHECK_CUSTOMER                                 *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  US_VBKRED                                                     *
+*  -->  CH_RC                                                         *
+*---------------------------------------------------------------------*
+FORM AUTHORITY_CHECK_CUSTOMER CHANGING US_VBKRED STRUCTURE VBKRED
+                                       CH_RC.
+  ON CHANGE OF US_VBKRED-CTLPC
+  OR           US_VBKRED-KKBER
+  OR           US_VBKRED-KLPRZ
+  OR           US_VBKRED-SBGRP.
+    CALL FUNCTION 'CREDIT_AUTHORITYCHECK_CUSTOMER'
+      EXPORTING
+        ACTVT = '03'
+        CTLPC = US_VBKRED-CTLPC
+        KKBER = US_VBKRED-KKBER
+        KLPRZ = US_VBKRED-KLPRZ
+        SBGRP = US_VBKRED-SBGRP
+      IMPORTING
+        SUBRC = CH_RC.
+    CHECK CH_RC NE 0.
+    CHECK AUTH_MESSAGE_KNKK_SENT NE 'X'.
+    AUTH_MESSAGE_KNKK_SENT = 'X'.
+    IF CH_RC    EQ 8
+    OR CH_RC    EQ 24
+    OR CH_RC    EQ 28
+    OR CH_RC    EQ 32
+    OR CH_RC    EQ 34.
+      MESSAGE E004 WITH 'V_KNKK_KRE'.
+    ELSEIF CH_RC    EQ 4
+    OR     CH_RC    EQ 12
+    OR     CH_RC    EQ 16
+    OR     CH_RC    EQ 24.
+      MOVE-CORRESPONDING US_VBKRED TO MESSAGE_KNKK_VAR1.
+      MESSAGE I005 WITH MESSAGE_KNKK_VAR1 US_VBKRED-KLPRZ
+                        '03' CH_RC.
+    ENDIF.
+  ENDON.
+ENDFORM.                    "AUTHORITY_CHECK_CUSTOMER
+
+*---------------------------------------------------------------------*
+*       FORM AUTHORITY_CHECK_DOCUMENT                                 *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  US_VBKRED                                                     *
+*  -->  CH_RC                                                         *
+*---------------------------------------------------------------------*
+FORM AUTHORITY_CHECK_DOCUMENT CHANGING US_VBKRED STRUCTURE VBKRED
+                                       CH_RC.
+  DATA: DA_SIZEC LIKE VBKRED-SIZEC.
+
+  IF DA_SIZEC NE US_VBKRED-SIZEC OR
+     US_VBKRED-SIZEC IS INITIAL.
+    DA_SIZEC = US_VBKRED-SIZEC.
+    IF US_VBKRED-SIZEC IS INITIAL.
+      CALL FUNCTION 'CREDIT_AUTHORITYCHECK_DOCUMENT'
+        EXPORTING
+          ACTVT  = '03'
+          KKBER  = US_VBKRED-KKBER
+          KWKKB  = US_VBKRED-KWKKB
+          CMWAE  = US_VBKRED-CMWAE
+        IMPORTING
+          RSIZEC = US_VBKRED-SIZEC
+          SUBRC  = CH_RC.
+    ELSE.
+      CALL FUNCTION 'CREDIT_AUTHORITYCHECK_DOCUMENT'
+        EXPORTING
+          ACTVT = '03'
+          SIZEC = US_VBKRED-SIZEC
+        IMPORTING
+          SUBRC = CH_RC.
+    ENDIF.
+  ENDIF.
+  CHECK CH_RC NE 0.
+  CHECK AUTH_MESSAGE_VBUK_SENT NE 'X'.
+  AUTH_MESSAGE_VBUK_SENT = 'X'.
+  IF SY-SUBRC EQ 8
+  OR SY-SUBRC EQ 24
+  OR SY-SUBRC EQ 28
+  OR SY-SUBRC EQ 32
+  OR SY-SUBRC EQ 34.
+    MESSAGE E004 WITH 'V_VBUK_KRE'.
+  ELSEIF SY-SUBRC EQ 4
+  OR     SY-SUBRC EQ 12
+  OR     SY-SUBRC EQ 16
+  OR     SY-SUBRC EQ 24.
+    MESSAGE I003 WITH US_VBKRED-SIZEC '03' CH_RC.
+  ENDIF.
+ENDFORM.                    "AUTHORITY_CHECK_DOCUMENT
+
+*--------------------------------------------------------------------*
+* Call event GET VBKRED
+*--------------------------------------------------------------------*
+FORM PUT_VBKRED.
+  PERFORM VBAK_ODER_VBUK CHANGING FLG_TABELLE.
+  IF FLG_TABELLE EQ CON_VBUK OR
+     FLG_TABELLE EQ CON_MACO.
+    PERFORM VBUK_LESEN.
+    PERFORM VBAK_LESEN.
+    PERFORM FPLA_LESEN.
+    PERFORM VBAP_LESEN.
+    PERFORM LIKP_LESEN.
+  ELSE.
+    PERFORM VBAK_LESEN_VOR_VBUK.
+    PERFORM FPLA_LESEN.
+    PERFORM LIKP_LESEN_VOR_VBUK.
+    PERFORM VBUK_LESEN_NACH_VBAK.
+    PERFORM VBAP_LESEN.
+  ENDIF.
+  PERFORM VBPA_LESEN.
+  PERFORM VBKRED_FUELLEN.
+* CALL FUNCTION 'SD_VBKRED_POSITIONS_FILL'
+*      TABLES
+*           YVBAP = XVBAP
+*           YVBEP = YVBEP
+*           YVBUK = XVBUK
+*           YVBAK = XVBAK.
+* IF NOT ( POSI IS INITIAL ).
+*   CALL FUNCTION 'SD_VBKRED_POSITIONS'
+*        TABLES
+*             XVBKRED = XVBKRED.
+* ENDIF.
+  CLEAR T691F.
+  LOOP AT XVBKRED.
+    VBKRED = XVBKRED.
+    PERFORM VBKREDET_FUELLEN CHANGING VBKRED-KWKKD          "P30K028860
+                                      VBKRED-KWKKE.         "P30K028860
+    PUT VBKRED.
+  ENDLOOP.
+ENDFORM.                               "PUT_VBKRED
+
+*---------------------------------------------------------------------*
+*       FORM PUT_VBKREDET                                             *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM PUT_VBKREDET.
+  CHECK NOT FLG_KKL IS INITIAL.
+  LOOP AT XVBKREDET.
+    VBKREDET = XVBKREDET.
+*   Zulesen externe Daten (WKV)
+    PERFORM WKV_VBKREDET_ERGAENZEN CHANGING VBKREDET.
+    PUT VBKREDET.
+  ENDLOOP.
+ENDFORM.                    "PUT_VBKREDET
+
+*---------------------------------------------------------------------*
+*       FORM LIKP_LESEN                                               *
+*---------------------------------------------------------------------*
+*       Lieferungen    werden gelesen und in die interne Arbeitstab   *
+*       abgelegt                                                      *
+*---------------------------------------------------------------------*
+FORM LIKP_LESEN.
+
+* Füllen Selektionstabelle für die Belege.
+* Es werden nur die gefundenen Lieferungen berücksichtigt
+  LOOP AT XVBUK WHERE VBOBJ = LIEFERUNG.
+    XVBELN-LOW = XVBUK-VBELN.
+    XVBELN-SIGN = 'I'.
+    XVBELN-OPTION = 'EQ'.
+    APPEND XVBELN.
+  ENDLOOP.
+  CHECK SY-SUBRC = 0.
+
+* Belegkoepfe werden im 100-Block gelesen.
+  DO.
+    PERFORM YVBELN_FUELLEN.
+
+* Lesen Lieferungen.
+    SELECT * FROM LIKP APPENDING TABLE XLIKP WHERE VBELN IN YVBELN
+                                             AND   KKBER IN KKBER
+                                             AND   KNKLI IN KNKLI
+                                             AND   GRUPP IN GRUPP
+                                             AND   SBGRP IN SBGRP
+                                             AND   CTLPC IN CTLPC
+                                             AND   CMNGV IN CMNGV
+                                             AND   VKORG IN VKORG "CCARD
+                                             AND   VKBUR IN VKBUR "CCARD
+                                             AND   ERNAM IN ERNAM "CCARD
+*                                            and   rplnr in rplnr "CCARD
+                                             ORDER BY PRIMARY KEY.
+* Check that the previous document has payment cards
+    IF CARDMODE = 'X'.                 "CCard
+      TABLES: LIPS.
+      DATA: DELETE_FLAG.
+      LOOP AT XLIKP.
+        DELETE_FLAG = 'X'.
+        SELECT * FROM LIPS
+               WHERE VBELN = XLIKP-VBELN.
+          IF NOT LIPS-VGBEL IS INITIAL AND
+             NOT LIPS-ABFOR IS INITIAL.
+            SELECT SINGLE * FROM VBAK
+                   WHERE VBELN = LIPS-VGBEL
+                   AND   RPLNR IN RPLNR.
+            IF SY-SUBRC = 0.
+              DELETE_FLAG = ' '.
+              EXIT.
+            ENDIF.
+          ENDIF.
+        ENDSELECT.
+        IF DELETE_FLAG = 'X'.
+          DELETE XLIKP.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+* Sind keine Belege mehr vorggeben, wird die Selektionsschleife
+* verlassen.
+    DESCRIBE TABLE XVBELN LINES SY-TFILL.
+    IF SY-TFILL = 0.
+      EXIT.
+    ENDIF.
+  ENDDO.
+ENDFORM.                    "LIKP_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM MATCHCODE_LESEN                                          *
+*---------------------------------------------------------------------*
+*       Bei Eingabe des Matchcodes werden die Belege                  *
+*       über den Matchcode selektiert                                 *
+*       Das Ermitteln der Belege ist  in der dazugehörigen            *
+*       Formroutine ( Name = Matchcodetabelle ) hinterlegt            *
+*---------------------------------------------------------------------*
+*  -->  MATCHCODE                                                     *
+*  -->  ID                                                            *
+*---------------------------------------------------------------------*
+FORM MATCHCODE_LESEN USING MATCHCODE ID.
+  DATA: POOL LIKE DD20V-POOL.
+
+  POOL   = 'M'.
+  POOL+1 = MATCHCODE.
+  POOL+5 = '_'.
+  POOL+6 = ID.
+  PERFORM (POOL) IN PROGRAM SAPDBKMV.
+
+ENDFORM.                    "MATCHCODE_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM ORT_ERMITTELN                                            *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  KUNDE                                                         *
+*  -->  ADRESSE                                                       *
+*  -->  NAME                                                          *
+*  -->  ORT                                                           *
+*  -->  VBADR                                                         *
+*---------------------------------------------------------------------*
+FORM ORT_ERMITTELN USING US_KUNDE ADRESSE NAME ORT LAND.
+  DATA: RC LIKE SY-SUBRC.
+
+  READ TABLE KUNDE WITH KEY KNKLI = US_KUNDE
+                            ADRNR = ADRESSE
+                            BINARY SEARCH.
+  RC = SY-SUBRC.
+  IF SY-SUBRC = 0.
+    NAME = KUNDE-NAME1.
+    ORT  = KUNDE-ORT01.
+    LAND = KUNDE-LAND.
+  ELSE.
+    VBPA-KUNNR = US_KUNDE.
+    VBPA-ADRNR = ADRESSE.
+    CALL FUNCTION 'VIEW_VBADR'
+      EXPORTING
+        INPUT   = VBPA
+        NRART   = 'KU'
+      IMPORTING
+        ADRESSE = VBADR.
+    NAME         = VBADR-NAME1.
+    ORT          = VBADR-ORT01.
+    LAND         = VBADR-LAND1.
+    KUNDE-KNKLI = US_KUNDE.
+    KUNDE-NAME1 = NAME.
+    KUNDE-ORT01 = ORT.
+    KUNDE-LAND  = LAND.
+    KUNDE-ADRNR = ADRESSE.
+    IF RC = 8 OR SY-TABIX = 0.
+      APPEND KUNDE.
+    ELSE.
+      INSERT KUNDE INDEX SY-TABIX.
+    ENDIF.
+  ENDIF.
+ENDFORM.                    "ORT_ERMITTELN
+
+*---------------------------------------------------------------------*
+*       FORM VBAK_LESEN                                               *
+*---------------------------------------------------------------------*
+*       Verkaufsbelege werden gelesen und in die interne Arbeitstab   *
+*       abgelegt                                                      *
+*---------------------------------------------------------------------*
+FORM VBAK_LESEN.
+  DATA: TABLE_SIZE LIKE SY-TFILL.
+
+  REFRESH XVBELN.
+
+* Füllen Selektionstabelle für die Belege.
+* Es werden nur die gefundenen Aufträge berücksichtigt
+  LOOP AT XVBUK WHERE VBOBJ = VERKAUFSBELEG.
+    XVBELN-LOW = XVBUK-VBELN.
+    XVBELN-SIGN = 'I'.
+    XVBELN-OPTION = 'EQ'.
+    APPEND XVBELN.
+  ENDLOOP.
+
+  CHECK SY-SUBRC = 0.
+
+* Belegkoepfe werden im 100-Block gelesen.
+  DO.
+    PERFORM YVBELN_FUELLEN.
+
+* Lesen Verkaufsbelege
+    SELECT * FROM VBAK APPENDING TABLE XVBAK WHERE VBELN IN YVBELN
+                                             AND   KKBER IN KKBER
+                                             AND   KNKLI IN KNKLI
+                                             AND   GRUPP IN GRUPP
+                                             AND   SBGRP IN SBGRP
+                                             AND   CTLPC IN CTLPC
+                                             AND   CMNGV IN CMNGV
+                                             AND   CMNUP IN CMNUP
+                                             AND   VKBUR IN VKBUR "CCard
+                                             AND   VKGRP IN VKGRP "CCard
+                                             AND   VKORG IN VKORG "CCARD
+                                             AND   VTWEG IN VTWEG "CCARD
+                                             AND   SPART IN SPART "CCARD
+                                             AND   ERNAM IN ERNAM "CCard
+                                             AND   RPLNR IN RPLNR "CCard
+                                             ORDER BY PRIMARY KEY.
+
+* Sind keine Belege mehr vorggeben, wird die Selektionsschleife
+* verlassen.
+    DESCRIBE TABLE XVBELN LINES SY-TFILL.
+    IF SY-TFILL = 0.
+      EXIT.
+    ENDIF.
+  ENDDO.
+ENDFORM.                    "VBAK_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM FPLA_LESEN                                               *
+*---------------------------------------------------------------------*
+*       Zahlungskarten werden gelesen und in die interne Arbeitstab   *
+*       abgelegt (FPLA)                                               *
+*---------------------------------------------------------------------*
+FORM FPLA_LESEN.
+* CCARD - Begin
+  TABLES: FPLA.
+  DATA: BEGIN OF RPLNR_TAB OCCURS 10,
+          RPLNR LIKE VBAK-RPLNR,
+        END OF RPLNR_TAB.
+
+  CHECK CARDMODE = 'X'.
+
+  LOOP AT XVBAK.
+    CHECK NOT XVBAK-RPLNR IS INITIAL.
+    RPLNR_TAB-RPLNR = XVBAK-RPLNR.
+    APPEND RPLNR_TAB.
+  ENDLOOP.
+
+  DESCRIBE TABLE RPLNR_TAB LINES SY-TFILL.
+  CHECK SY-TFILL NE 0.
+
+  SORT RPLNR_TAB.
+  SELECT * FROM FPLA APPENDING TABLE XFPLA FOR ALL ENTRIES IN RPLNR_TAB
+           WHERE FPLNR = RPLNR_TAB-RPLNR
+           AND   AUST1 IN AUST1
+           AND   AUST2 IN AUST2
+           AND   AUST3 IN AUST3
+           AND   AUST5 IN AUST5
+           ORDER BY PRIMARY KEY.
+
+  LOOP AT XVBAK.
+    CHECK NOT XVBAK-RPLNR IS INITIAL.
+    READ TABLE XFPLA
+         WITH KEY FPLNR = XVBAK-RPLNR
+         BINARY SEARCH.
+    IF SY-SUBRC NE 0.
+      DELETE XVBAK.
+    ENDIF.
+  ENDLOOP.
+* CCARD - End
+ENDFORM.                    "FPLA_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM VBAP_LESEN                                               *
+*---------------------------------------------------------------------*
+*       Positionen     werden gelesen und in die interne Arbeitstab   *
+*       abgelegt                                                      *
+*       Die Positionen werden gelesen, um die nächste Einteilung      *
+*       zur Ermittlung der des frühesten Versanddatum zu erhalten     *
+*---------------------------------------------------------------------*
+FORM VBAP_LESEN.
+
+  REFRESH XVBELN.
+
+* Füllen Selektionstabelle für die Belege
+  LOOP AT XVBAK.
+    MOVE-CORRESPONDING XVBAK TO BELEG_KEY.
+    READ TABLE XVBUK WITH KEY BELEG_KEY BINARY SEARCH.
+    CHECK SY-SUBRC EQ 0.
+    XVBELN-LOW = XVBAK-VBELN.
+    XVBELN-SIGN = 'I'.
+    XVBELN-OPTION = 'EQ'.
+    APPEND XVBELN.
+  ENDLOOP.
+  CHECK SY-SUBRC = 0.
+
+  DESCRIBE TABLE XVBELN LINES SY-TFILL.
+  CHECK SY-TFILL GT 0.
+
+* Belegkoepfe werden im 100-Block gelesen.
+  DO.
+    PERFORM YVBELN_FUELLEN.
+* Lesen Positionen
+    SELECT * FROM VBAP APPENDING TABLE XVBAP WHERE VBELN IN YVBELN
+                                             AND   CMPNT = 'X'
+                                             ORDER BY PRIMARY KEY.
+
+* Sind keine Belege mehr vorggeben, wird die Selektionsschleife
+* verlassen.
+    DESCRIBE TABLE XVBELN LINES SY-TFILL.
+    IF SY-TFILL = 0.
+      EXIT.
+    ENDIF.
+  ENDDO.
+ENDFORM.                    "VBAP_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM VBEP_LESEN                                               *
+*---------------------------------------------------------------------*
+*       Einteilungen werden gelesen und in die interne Arbeitstab     *
+*       abgelegt.                                                     *
+*       Ermittlung des frühesten Versanddatums interne Arbeitstab     *
+*---------------------------------------------------------------------*
+FORM VBEP_LESEN USING BELEG.
+  SELECT * FROM VBEP APPENDING TABLE XVBEP WHERE VBELN = BELEG
+                                           ORDER BY PRIMARY KEY.
+
+  SELECT * FROM VBUP APPENDING TABLE XVBUP  WHERE VBELN = BELEG
+                                       ORDER BY PRIMARY KEY.
+
+  SELECT * FROM VBFA APPENDING TABLE XVBFA  WHERE VBELV = BELEG
+                                       ORDER BY PRIMARY KEY.
+
+ENDFORM.                    "VBEP_LESEN
+
+
+*----------------------------------------------------------------------*
+*       FORM VBPA_LESEN
+*----------------------------------------------------------------------*
+*       Partner 'Auftraggeber lesen'
+*----------------------------------------------------------------------*
+FORM VBPA_LESEN.
+  RANGES PARVW FOR VBPA-PARVW.
+  MOVE: 'I' TO PARVW-SIGN,
+        'EQ' TO PARVW-OPTION,
+        'AG' TO PARVW-LOW.
+  APPEND PARVW.
+  MOVE: 'I' TO PARVW-SIGN,
+        'EQ' TO PARVW-OPTION,
+        'RG' TO PARVW-LOW.
+  APPEND PARVW.
+
+  LOOP AT XVBAK.
+    SELECT * FROM VBPA APPENDING TABLE XVBPA
+                  WHERE VBELN = XVBAK-VBELN
+                    AND POSNR = '000000'
+                    AND PARVW IN PARVW.
+  ENDLOOP.
+  LOOP AT XLIKP.
+    SELECT * FROM VBPA APPENDING TABLE XVBPA
+                  WHERE VBELN = XLIKP-VBELN
+                    AND POSNR = '000000'
+                    AND PARVW IN PARVW.
+  ENDLOOP.
+  SORT XVBPA.
+ENDFORM.                    "VBPA_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM VBKRED_FUELLEN                                           *
+*---------------------------------------------------------------------*
+*       Arbeitstabelle für Kreditlimit wird über Verkaufsbelge        *
+*       Lieferungen und Belegkoepfe gefuellt                          *
+*---------------------------------------------------------------------*
+FORM VBKRED_FUELLEN.
+
+  DATA: DA_DUMMY_LAND LIKE VBKRED-LAND.
+
+* Übertragen Informationen aus gefundenen Aufträgen
+  LOOP AT XVBAK.
+    CLEAR XVBKRED.
+    MOVE-CORRESPONDING XVBAK TO BELEG_KEY.
+    READ TABLE XVBUK WITH KEY BELEG_KEY BINARY SEARCH.
+    CHECK SY-SUBRC EQ 0.
+* Allgemeiner Belegkopf
+    MOVE-CORRESPONDING XVBUK TO XVBKRED.
+* Auftragskopf
+    MOVE-CORRESPONDING XVBAK TO XVBKRED.
+    XVBKRED-KUNAG = XVBAK-KUNNR.
+    IF NOT XVBAK-RPLNR IS INITIAL.
+      READ TABLE XFPLA WITH KEY FPLNR = XVBAK-RPLNR BINARY SEARCH.
+      MOVE-CORRESPONDING XFPLA TO XVBKRED.
+      MOVE XVBAK-VBELN         TO XVBKRED-VBELN.
+    ENDIF.
+* Auftragsposition.
+    PERFORM VBEP_LESEN USING BELEG_KEY-VBELN.
+    CALL FUNCTION 'SD_CREDIT_VALUE_ORDER'
+      EXPORTING
+        VBAK   = XVBAK
+      IMPORTING
+        AMTBL  = XVBKRED-KWKKB
+        KWKKG  = XVBKRED-KWKKF
+      TABLES
+        XVBAP  = XVBAP
+        XVBAPF = XVBAPF
+        XVBFA  = XVBFA
+        XVBKD  = XVBKD
+        XVBUP  = XVBUP.
+    MOVE XVBKRED-KWKKB TO XVBKRED-KWKKC.
+    MOVE XVBKRED-KWKKF TO XVBKRED-KWKKG.
+* Ermitteln Versanddatum
+    IF XVBKRED-CMNGV IS INITIAL.
+      CALL FUNCTION 'SD_NEXT_ACTION_DATE_ORDER'
+        EXPORTING
+          XVBAK = XVBAK
+        IMPORTING
+          CMNGV = XVBKRED-CMNGV
+        TABLES
+          XVBAP = XVBAP
+          XVBEP = XVBEP
+          XVBFA = XVBFA
+          XVBUK = XVBUK
+          XVBUP = XVBUP.
+    ENDIF.
+*   Ermitteln Partnerdaten
+    READ TABLE XVBPA WITH KEY VBELN = XVBAK-VBELN
+                              PARVW = 'RG'
+                      BINARY SEARCH.
+    IF SY-SUBRC = 0 AND
+       NOT ( XVBPA-ADRNR IS INITIAL ).
+      IF XVBKRED-KNKLI = XVBPA-KUNNR.  "Kreditkonto = Regulierer
+        XVBKRED-ADRNR = XVBPA-ADRNR.
+      ELSE.
+        CLEAR XVBKRED-ADRNR.
+      ENDIF.
+    ELSE.
+      CLEAR XVBKRED-ADRNR.
+    ENDIF.
+
+    IF NOT XVBKRED-KNKLI IS INITIAL.
+      PERFORM ORT_ERMITTELN USING XVBKRED-KNKLI XVBKRED-ADRNR
+                                  XVBKRED-NAME1 XVBKRED-ORT01
+                                  XVBKRED-LAND.
+    ENDIF.
+    IF NOT XVBKRED-KUNAG IS INITIAL.
+      PERFORM ORT_ERMITTELN USING XVBKRED-KUNAG XVBKRED-AGADRNR
+                                  XVBKRED-AGNAME1 XVBKRED-AGORT01
+                                  DA_DUMMY_LAND.
+    ENDIF.
+    PERFORM ZAHLUNGSBEDINGUNGEN_ERMITTELN USING XVBKRED-VBELN
+                                                XVBKRED-POSNR
+                                                XVBKRED-ZTERM.
+    MOVE XVBKD-LCNUM TO XVBKRED-LCNUM.
+    PERFORM STATUS_ERMITTELN.
+    PERFORM CC_STATUS_ERMITTELN.       "CCARD
+    PERFORM CREDIT_EXPOSURE.
+*   MOVE-CORRESPODING aus VBAK/LIKP läuft vor KNKK
+    XVBKRED-ERNAM = XVBAK-ERNAM.
+    XVBKRED-ERDAT = XVBAK-ERDAT.
+    XVBKRED-GRUPP = XVBAK-GRUPP.
+    XVBKRED-SBGRP = XVBAK-SBGRP.
+    XVBKRED-CTLPC = XVBAK-CTLPC.
+    IF TVAK-AUART NE XVBAK-AUART.
+      SELECT SINGLE * FROM TVAK WHERE AUART EQ XVBAK-AUART.
+    ENDIF.
+    XVBKRED-CRMGR = TVAK-CMGRA.
+    IF    T691F-KKBER NE XVBAK-KKBER
+    OR    T691F-CTLPC NE XVBAK-CTLPC
+    OR    T691F-CRMGR NE TVAK-CMGRA.
+      CLEAR T691F.
+      SELECT SINGLE * FROM T691F
+      WHERE KKBER EQ XVBAK-KKBER
+      AND   CTLPC EQ XVBAK-CTLPC
+      AND   CRMGR EQ TVAK-CMGRA.
+    ENDIF.
+    XVBKRED-TAGEF = T691F-TAGEF.
+    PERFORM AUTHORITY_CHECK_DOCUMENT CHANGING XVBKRED
+                                              AUTH_VBUK_RC.
+    PERFORM AUTHORITY_CHECK_CUSTOMER CHANGING XVBKRED
+                                              AUTH_KNKK_RC.
+    CHECK AUTH_VBUK_RC EQ 0
+    AND   AUTH_KNKK_RC EQ 0.
+    APPEND XVBKRED.
+  ENDLOOP.
+
+* Übertragen Informationen aus gefundenen Lieferungen
+  LOOP AT XLIKP.
+    CLEAR XVBKRED.
+    MOVE-CORRESPONDING XLIKP TO BELEG_KEY.
+    READ TABLE XVBUK WITH KEY BELEG_KEY BINARY SEARCH.
+    CHECK SY-SUBRC EQ 0.
+    MOVE-CORRESPONDING XVBUK TO XVBKRED.
+    MOVE-CORRESPONDING XLIKP TO XVBKRED.
+*
+    REFRESH: LVBAK, LVBAP, LVBKD.
+    CALL FUNCTION 'SD_CREDIT_VALUE_DELIVERY'
+      EXPORTING
+        LIKP  = XLIKP
+      IMPORTING
+        AMTBL = XVBKRED-KWKKB
+        KWKKG = XVBKRED-KWKKF                               "n_712183
+      TABLES
+        LVBAK = LVBAK
+        LVBAP = LVBAP
+        XLIPS = LLIPS
+        XVBUP = XVBUP                                       "K11K101476
+        XVBKD = LVBKD.
+    MOVE XVBKRED-KWKKB TO XVBKRED-KWKKC.
+    MOVE XVBKRED-KWKKF TO XVBKRED-KWKKG.                    "n_712183
+*
+    CALL FUNCTION 'SD_NEXT_ACTION_DATE_DELIVERY'
+      EXPORTING
+        LIKP   = XLIKP
+      IMPORTING
+        LCMNGV = XVBKRED-CMNGV
+      TABLES
+        XVBUK  = XVBUK.
+    READ TABLE XVBPA WITH KEY VBELN = XLIKP-VBELN
+                              PARVW = 'RG'
+                      BINARY SEARCH.
+    IF SY-SUBRC = 0 AND
+       NOT ( XVBPA-ADRNR IS INITIAL ).
+      IF XVBKRED-KNKLI = XVBPA-KUNNR.  "Kreditkonto = Regulierer
+        XVBKRED-ADRNR = XVBPA-ADRNR.
+      ELSE.
+        CLEAR XVBKRED-ADRNR.
+      ENDIF.
+    ELSE.
+      READ TABLE XVBPA WITH KEY VBELN = XLIKP-VBELN
+                                PARVW = 'AG'
+                        BINARY SEARCH.
+      IF XVBKRED-KNKLI = XVBPA-KUNNR.  "Kreditkonto = Auftraggeber
+        XVBKRED-ADRNR = XVBPA-ADRNR.
+      ELSE.
+        CLEAR XVBKRED-ADRNR.
+      ENDIF.
+    ENDIF.
+
+    IF NOT XVBKRED-KNKLI IS INITIAL.
+      PERFORM ORT_ERMITTELN USING XVBKRED-KNKLI XVBKRED-ADRNR
+                                  XVBKRED-NAME1 XVBKRED-ORT01
+                                  XVBKRED-LAND.
+    ENDIF.
+    IF NOT XVBKRED-KUNAG IS INITIAL.
+      PERFORM ORT_ERMITTELN USING XVBKRED-KUNAG XVBKRED-AGADRNR
+                                  XVBKRED-AGNAME1 XVBKRED-AGORT01
+                                  DA_DUMMY_LAND.
+    ENDIF.
+
+    PERFORM STATUS_ERMITTELN.
+    PERFORM CREDIT_EXPOSURE.
+    XVBKRED-CMNGV = XLIKP-WADAT.
+    XVBKRED-ERNAM = XLIKP-ERNAM.
+    XVBKRED-ERDAT = XLIKP-ERDAT.
+    XVBKRED-GRUPP = XLIKP-GRUPP.
+    XVBKRED-SBGRP = XLIKP-SBGRP.
+    XVBKRED-CTLPC = XLIKP-CTLPC.
+    CLEAR  XVBKRED-ZTERM.
+    IF TVLK-LFART NE XLIKP-LFART.
+      SELECT SINGLE * FROM TVLK WHERE LFART EQ XLIKP-LFART.
+    ENDIF.
+    XVBKRED-CRMGR = TVLK-CMGRL.
+    IF    T691F-KKBER NE XLIKP-KKBER
+    OR    T691F-CTLPC NE XLIKP-CTLPC
+    OR    T691F-CRMGR NE TVLK-CMGRL.
+      CLEAR T691F.
+      SELECT SINGLE * FROM T691F
+      WHERE KKBER EQ XLIKP-KKBER
+      AND   CTLPC EQ XLIKP-CTLPC
+      AND   CRMGR EQ TVLK-CMGRL.
+    ENDIF.
+    XVBKRED-TAGEF = T691F-TAGEF.
+    PERFORM AUTHORITY_CHECK_DOCUMENT CHANGING XVBKRED
+                                              AUTH_VBUK_RC.
+    PERFORM AUTHORITY_CHECK_CUSTOMER CHANGING XVBKRED
+                                              AUTH_KNKK_RC.
+    CHECK AUTH_VBUK_RC EQ 0
+    AND   AUTH_KNKK_RC EQ 0.
+    APPEND XVBKRED.
+  ENDLOOP.
+
+* Übertragen Infos aus Kundenmodifikation
+  PERFORM USER_EXIT_FUELLEN_XVBKRED.
+ENDFORM.                    "VBKRED_FUELLEN
+
+*---------------------------------------------------------------------*
+*       FORM VBKREDET_FUELLEN                                         *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  CH_KWKKD                                                      *
+*  -->  CH_KWKKE                                                      *
+*---------------------------------------------------------------------*
+FORM VBKREDET_FUELLEN CHANGING CH_KWKKD CH_KWKKE.           "P30K028860
+  LOCAL: XVBAPF-REMNG, XVBAPF-ERLMENGE_F.
+  DATA: DA_DUMMY LIKE VBKREDET-KWKKF.
+  DATA: DA_SUM_KBMENG LIKE VBAP-KBMENG.
+  DATA: OLFMNG_Q15 TYPE MC_OLIMEAU.
+  CLEAR: CH_KWKKD, CH_KWKKE.
+* Detaildaten aus Position und Einteilung füllen
+  REFRESH XVBKREDET. CLEAR: XVBKREDET, VBKREDET.
+  IF VBKRED-VBTYP CA VBTYP_VERK.
+*   Ermitteln Kreditfortschreibung
+    READ TABLE XVBAK WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN BINARY SEARCH.
+    READ TABLE XVBUK WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN BINARY SEARCH.
+    IF NOT XVBUK-CMPSB IS INITIAL.
+*     Horizont ermitteln
+      IF TVAK-AUART NE XVBAK-AUART.
+        SELECT SINGLE * FROM TVAK WHERE AUART EQ XVBAK-AUART.
+      ENDIF.
+      IF    T691F-KKBER NE XVBAK-KKBER
+      OR    T691F-CTLPC NE XVBAK-CTLPC
+      OR    T691F-CRMGR NE TVAK-CMGRA.
+        CLEAR T691F.
+        SELECT SINGLE * FROM T691F
+        WHERE KKBER EQ XVBAK-KKBER
+        AND   CTLPC EQ XVBAK-CTLPC
+        AND   CRMGR EQ TVAK-CMGRA.
+        IF NOT T691F-WSWIN IS INITIAL.
+          PERFORM HORIZON_DATE(SAPLVKMP)
+            USING    'S066'
+                     T691F-WSWIN
+            CHANGING SAV_HORIZON.
+          PERFORM GET_LAST_DATE_OF_PERIOD(SAPLVKMP)
+            USING    SAV_HORIZON XVBAK-KKBER
+            CHANGING SAV_HORIZON SAV_DATE_FIRST.
+        ELSE.
+          SAV_HORIZON = '99991231'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+    PERFORM TVKO_READ(SAPLVKMP) USING    XVBAK-VKORG
+                                CHANGING SAV_BUKRS.
+    IF T001-BUKRS NE SAV_BUKRS.
+      SELECT SINGLE * FROM T001
+      WHERE BUKRS EQ SAV_BUKRS.
+    ENDIF.
+    READ TABLE XVBKD WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN
+                              POSNR = '000000'     BINARY SEARCH.
+    READ TABLE XVBAP WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN BINARY SEARCH.
+    LOOP AT XVBAP FROM SY-TABIX.
+      IF XVBAP-VBELN NE XVBAK-VBELN. EXIT. ENDIF.
+      READ TABLE XVBKD WITH KEY MANDT = SY-MANDT
+                                VBELN = VBKRED-VBELN
+                                POSNR = XVBAP-POSNR  BINARY SEARCH.
+      READ TABLE XVBUP WITH KEY MANDT = SY-MANDT
+                                VBELN = VBKRED-VBELN
+                                POSNR = XVBAP-POSNR  BINARY SEARCH.
+      CHECK XVBUP-GBSTA CA 'AB'.
+*     Anzeige, nur wenn Position noch nicht erledigt.
+      PERFORM KREDIT_AKTIV(SAPLMCSB)
+      USING     SPACE
+                XVBAK
+                XVBAP
+                DLIKP
+                LLIPS
+                VBRKVB
+                VBRPVB
+      CHANGING  CREDIT_STAFO
+                CREDIT_PERIV.
+      IF NOT CREDIT_STAFO IS INITIAL.
+        CLEAR XVBEP.
+        READ TABLE XVBEP WITH KEY MANDT = SY-MANDT
+                                  VBELN = XVBAP-VBELN
+                                  POSNR = XVBAP-POSNR  BINARY SEARCH.
+        SAV_TABIX = SY-TABIX.
+        IF SY-SUBRC    EQ 0    AND
+           XVBUP-LFGSA CA 'AB'.
+          CLEAR DA_SUM_KBMENG.
+          REFRESH SAV_XVBEP.
+          LOOP AT XVBEP FROM SAV_TABIX.
+            IF XVBEP-VBELN NE XVBAP-VBELN OR
+               XVBEP-POSNR NE XVBAP-POSNR.
+              EXIT.
+            ENDIF.
+            MOVE XVBEP TO SAV_XVBEP. APPEND SAV_XVBEP.
+          ENDLOOP.
+          REFRESH SAV_XVBAP.
+          MOVE XVBAP TO SAV_XVBAP.
+          APPEND SAV_XVBAP.
+          CALL FUNCTION 'RV_SCHEDULE_CHECK_DELIVERIES'
+            EXPORTING
+              FBELEG                  = XVBAK-VBELN
+              FPOSNR                  = XVBAP-POSNR
+              FVERRECHNUNG            = ' '
+            TABLES
+              FVBFA                   = XVBFA
+              FVBUP                   = XVBUP
+              FXVBEP                  = SAV_XVBEP
+              FVBAP                   = SAV_XVBAP
+            EXCEPTIONS
+              FEHLER_BEI_LESEN_FVBUP  = 1
+              FEHLER_BEI_LESEN_FXVBEP = 2.
+          LOOP AT SAV_XVBEP.
+            READ TABLE XVBEP WITH KEY MANDT = SY-MANDT
+                                      VBELN = SAV_XVBEP-VBELN
+                                      POSNR = SAV_XVBEP-POSNR
+                                      ETENR = SAV_XVBEP-ETENR
+                                                BINARY SEARCH.
+            IF SY-SUBRC EQ 0.
+              MOVE SAV_XVBEP TO XVBEP.
+              MODIFY XVBEP INDEX SY-TABIX.
+            ENDIF.
+          ENDLOOP.
+          LOOP AT XVBEP FROM SAV_TABIX.
+            IF XVBEP-VBELN NE XVBAP-VBELN OR
+               XVBEP-POSNR NE XVBAP-POSNR.
+              EXIT.
+            ENDIF.
+            ADD XVBEP-BMENG TO DA_SUM_KBMENG.
+            IF XVBEP-BMENG  IS INITIAL AND
+               XVBEP-OLFMNG IS INITIAL AND
+               XVBEP-VSMNG  IS INITIAL AND
+               DA_SUM_KBMENG EQ XVBAP-KBMENG.
+*             wenn nichts bestätigt ist, dann halt die Wunschliefermenge
+*              XVBEP-OLFMNG = XVBEP-WMENG.
+            ENDIF.
+*            CHECK XVBEP-BMENG IS INITIAL OR
+*                  NOT XVBEP-OLFMNG IS INITIAL.
+              CLEAR VBKREDET.
+              MOVE-CORRESPONDING XVBAK  TO VBKREDET.
+              MOVE-CORRESPONDING XVBKD  TO VBKREDET.
+              MOVE-CORRESPONDING XVBAP  TO VBKREDET.
+              MOVE-CORRESPONDING XVBEP  TO VBKREDET.
+
+            IF XVBEP-BMENG IS INITIAL AND
+              XVBEP-OLFMNG IS INITIAL AND
+              XVBEP-VSMNG  IS INITIAL AND
+              DA_SUM_KBMENG EQ XVBAP-KBMENG.
+              VBKREDET-OLFMNG = XVBEP-WMENG.
+            ENDIF.
+
+*           VBKREDET-KWKKC = VBKREDET-CMPRE * VBKREDET-OLFMNG.
+            PERFORM CMPRE_CALCULATE(SAPLVKMP)
+              USING    XVBAP-CMPRE
+                       XVBAP-CMPRE_FLT
+                       VBKREDET-OLFMNG
+                       XVBEP-ABGES
+              CHANGING VBKREDET-KWKKC
+                       DA_DUMMY
+                       VBKREDET-KWKKG.
+            IF NOT VBKREDET-KWKKC IS INITIAL AND
+               NOT XVBAK-CMWAE IS INITIAL.
+              PERFORM STAT_CURR_CONVERT_EX(RMCS1000)
+                USING    VBKREDET-KWKKC
+                         XVBKD-PRSDT
+                         XVBAP-ERDAT
+                         XVBAK-WAERK
+                         T001-WAERS
+                         XVBAK-CMWAE
+                         XVBKD-KURSK
+                         XVBAP-CMKUA
+                         XVBAK-KURST
+                         'M'
+                CHANGING VBKREDET-KWKKC.
+            ENDIF.
+            IF NOT VBKREDET-KWKKG IS INITIAL AND
+               NOT XVBAK-CMWAE IS INITIAL.
+              PERFORM STAT_CURR_CONVERT_EX(RMCS1000)
+                USING    VBKREDET-KWKKG
+                         XVBKD-PRSDT
+                         XVBAP-ERDAT
+                         XVBAK-WAERK
+                         T001-WAERS
+                         XVBAK-CMWAE
+                         XVBKD-KURSK
+                         XVBAP-CMKUA
+                         XVBAK-KURST
+                         'M'
+                CHANGING VBKREDET-KWKKG.
+            ENDIF.
+            MOVE VBKREDET-KWKKC TO VBKREDET-KWKKB.
+            MOVE VBKREDET-KWKKG TO VBKREDET-KWKKF.
+            IF  NOT XVBUK-CMPSB IS INITIAL
+                AND VBKREDET-MBDAT GT SAV_HORIZON.
+              MOVE VBKREDET-KWKKB TO VBKREDET-KWKKD.
+              MOVE VBKREDET-KWKKC TO VBKREDET-KWKKE.
+              ADD VBKREDET-KWKKD TO CH_KWKKD.
+              CLEAR: VBKREDET-KWKKB, VBKREDET-KWKKC.
+            ENDIF.
+            MOVE VBKREDET TO XVBKREDET.
+            IF XVBEP-BMENG IS INITIAL AND
+                XVBEP-OLFMNG IS INITIAL AND
+                XVBEP-VSMNG  IS INITIAL AND
+                DA_SUM_KBMENG EQ XVBAP-KBMENG.
+              XVBKREDET-OLFMNG = XVBEP-OLFMNG.
+            ENDIF.
+            APPEND XVBKREDET.
+          ENDLOOP.
+        ELSE.
+          CLEAR VBKREDET.
+          CLEAR XVBAPF.
+          READ TABLE XVBAPF WITH KEY VBELN = VBKRED-VBELN
+                                     POSNR = XVBAP-POSNR  BINARY SEARCH.
+          IF XVBAP-VRKME NE XVBAP-MEINS.
+            PERFORM LAGERMENGE_BETRAG(SAPLMCS1) "hier Verkaufsmenge
+              USING    XVBAP-MEINS
+                       XVBAP-VRKME
+                       XVBAP-UMVKN
+                       XVBAP-UMVKZ
+                       XVBAPF-ERLMENGE_F
+              CHANGING XVBAPF-ERLMENGE_F.
+            IF NOT XVBAPF-REMNG IS INITIAL.
+              PERFORM LAGERMENGE_BETRAG(SAPLMCS1) "hier Verkaufsmenge
+                USING    XVBAP-MEINS
+                         XVBAP-VRKME
+                         XVBAP-UMVKN
+                         XVBAP-UMVKZ
+                         XVBAPF-REMNG
+                CHANGING XVBAPF-REMNG.
+            ENDIF.
+            IF NOT XVBAPF-WEMNG IS INITIAL.
+              PERFORM LAGERMENGE_BETRAG(SAPLMCS1) "hier Verkaufsmenge
+                USING    XVBAP-MEINS
+                         XVBAP-VRKME
+                         XVBAP-UMVKN
+                         XVBAP-UMVKZ
+                         XVBAPF-WEMNG
+                CHANGING XVBAPF-WEMNG.
+            ENDIF.
+          ENDIF.
+          OLFMNG_Q15 = VBKREDET-OLFMNG.
+          PERFORM AUFTRAGSMENGE_ERMITTELN(SAPLMCS1)
+            USING    XVBUP-FKSAA
+                     XVBUP-FKSTA
+                     XVBAP-FKREL
+                     XVBAP-LSMENG
+                     XVBAP-KWMENG
+                     XVBAP-ZMENG
+                     XVBAPF-REMNG
+                     XVBAPF-WEMNG
+            CHANGING OLFMNG_Q15.
+          VBKREDET-OLFMNG = OLFMNG_Q15.
+          IF NOT XVBAP-KZFME IS INITIAL.
+*           Wirkstoff
+            IF VBKREDET-OLFMNG GE XVBAPF-ERLMENGEFV.
+              VBKREDET-OLFMNG = VBKREDET-OLFMNG - XVBAPF-ERLMENGEFV.
+            ELSE.
+              CLEAR VBKREDET-OLFMNG.
+            ENDIF.
+          ELSE.
+*           unterstellt, daß Mengeneinheiten gleich
+            IF VBKREDET-OLFMNG GE XVBAPF-ERLMENGE_F.
+              VBKREDET-OLFMNG = VBKREDET-OLFMNG - XVBAPF-ERLMENGE_F.
+            ELSE.
+              CLEAR VBKREDET-OLFMNG.
+            ENDIF.
+          ENDIF.
+          CHECK NOT VBKREDET-OLFMNG IS INITIAL.
+          MOVE-CORRESPONDING XVBAK  TO VBKREDET.
+          MOVE-CORRESPONDING XVBKD  TO VBKREDET.
+          MOVE-CORRESPONDING XVBAP  TO VBKREDET.
+          IF NOT XVBEP-MBDAT IS INITIAL.
+            MOVE XVBEP-MBDAT          TO VBKREDET-MBDAT.
+*           letzte bestätigte Einteilung bei Strecke
+            IF NOT XVBEP-BANFN IS INITIAL AND
+               NOT XVBEP-BNFPO IS INITIAL.
+            DATA: SAV_BANFN LIKE VBEP-BANFN,
+                  SAV_BNFPO LIKE VBEP-BNFPO.
+            SAV_BANFN = XVBEP-BANFN.
+            SAV_BNFPO = XVBEP-BNFPO.
+              LOOP AT XVBEP FROM SAV_TABIX.
+                IF XVBEP-BANFN NE SAV_BANFN OR
+                   XVBEP-BNFPO NE SAV_BNFPO.
+                  EXIT.
+                ENDIF.
+                IF XVBEP-BMENG GT 0.
+                  VBKREDET-MBDAT = XVBEP-MBDAT.
+                ENDIF.
+              ENDLOOP.
+            ENDIF.
+          ELSE.
+            MOVE XVBKD-FKDAT          TO VBKREDET-MBDAT.
+          ENDIF.
+*         VBKREDET-KWKKC = VBKREDET-CMPRE * VBKREDET-OLFMNG.
+          PERFORM CMPRE_CALCULATE(SAPLVKMP)
+            USING    XVBAP-CMPRE
+                     XVBAP-CMPRE_FLT
+                     VBKREDET-OLFMNG
+                     XVBAP-ABGES
+            CHANGING VBKREDET-KWKKC
+                     DA_DUMMY
+                     VBKREDET-KWKKG.
+          IF NOT VBKREDET-KWKKC IS INITIAL AND
+             NOT XVBAK-CMWAE IS INITIAL.
+            PERFORM STAT_CURR_CONVERT_EX(RMCS1000)
+              USING    VBKREDET-KWKKC
+                       XVBKD-PRSDT
+                       XVBAP-ERDAT
+                       XVBAK-WAERK
+                       T001-WAERS
+                       XVBAK-CMWAE
+                       XVBKD-KURSK
+                       XVBAP-CMKUA
+                       XVBAK-KURST
+                       'M'
+              CHANGING VBKREDET-KWKKC.
+          ENDIF.
+          IF NOT VBKREDET-KWKKG IS INITIAL AND
+             NOT XVBAK-CMWAE IS INITIAL.
+            PERFORM STAT_CURR_CONVERT_EX(RMCS1000)
+              USING    VBKREDET-KWKKG
+                       XVBKD-PRSDT
+                       XVBAP-ERDAT
+                       XVBAK-WAERK
+                       T001-WAERS
+                       XVBAK-CMWAE
+                       XVBKD-KURSK
+                       XVBAP-CMKUA
+                       XVBAK-KURST
+                       'M'
+              CHANGING VBKREDET-KWKKG.
+          ENDIF.
+          MOVE VBKREDET-KWKKC TO VBKREDET-KWKKB.
+          MOVE VBKREDET-KWKKG TO VBKREDET-KWKKF.
+          MOVE VBKREDET TO XVBKREDET.
+          APPEND XVBKREDET.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+    MOVE CH_KWKKD TO CH_KWKKE.
+  ELSE.
+*   Lieferungen
+    READ TABLE XLIKP WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN BINARY SEARCH.
+    READ TABLE XVBUK WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN BINARY SEARCH.
+    CHECK NOT XLIKP-VKORG IS INITIAL.
+    PERFORM TVKO_READ(SAPLVKMP) USING    XLIKP-VKORG
+                                CHANGING SAV_BUKRS.
+    IF T001-BUKRS NE SAV_BUKRS.
+      SELECT SINGLE * FROM T001
+      WHERE BUKRS EQ SAV_BUKRS.
+    ENDIF.
+    READ TABLE LLIPS WITH KEY MANDT = SY-MANDT
+                              VBELN = VBKRED-VBELN BINARY SEARCH.
+    LOOP AT LLIPS FROM SY-TABIX.
+      IF LLIPS-VBELN NE XLIKP-VBELN. EXIT. ENDIF.
+      READ TABLE XVBUP WITH KEY MANDT = SY-MANDT
+                                VBELN = VBKRED-VBELN
+                                POSNR = LLIPS-POSNR  BINARY SEARCH.
+      CLEAR LVBAP.
+      READ TABLE LVBAP WITH KEY MANDT = SY-MANDT
+                                VBELN = LLIPS-VGBEL
+                                POSNR = LLIPS-VGPOS  BINARY SEARCH.
+      MOVE LVBAP-CMPRE TO VBKREDET-CMPRE.
+      CLEAR VBKREDET-OLFMNG.
+      IF XVBUP-FKSTA CA 'AB'.
+        MOVE LLIPS-LFIMG TO VBKREDET-OLFMNG.
+      ENDIF.
+      MOVE-CORRESPONDING XLIKP  TO VBKREDET.
+      MOVE-CORRESPONDING LLIPS  TO VBKREDET.
+      MOVE XVBKRED-CMNGV        TO VBKREDET-MBDAT.
+*     MOVE XLIKP-WADAT_IST      TO VBKREDET-MBDAT.
+*     IF VBKREDET-MBDAT IS INITIAL.
+*       MOVE XLIKP-WADAT          TO VBKREDET-MBDAT.
+*     ENDIF.
+*     VBKREDET-KWKKC = LVBAP-CMPRE * VBKREDET-OLFMNG.
+      PERFORM CMPRE_CALCULATE(SAPLVKMP)
+        USING    LVBAP-CMPRE
+                 LVBAP-CMPRE_FLT
+                 VBKREDET-OLFMNG
+                 LLIPS-ABGES
+        CHANGING VBKREDET-KWKKC
+                 DA_DUMMY
+                 VBKREDET-KWKKG.
+      IF NOT VBKREDET-KWKKC IS INITIAL AND
+         NOT XVBKRED-CMWAE  IS INITIAL.
+        CLEAR:     XVBKD-KURSK.
+        PERFORM STAT_CURR_CONVERT_EX(RMCS1000)
+          USING    VBKREDET-KWKKC
+                   XLIKP-ERDAT
+                   LVBAP-ERDAT
+                   LVBAP-WAERK
+                   T001-WAERS
+                   XVBKRED-CMWAE
+                   XVBKD-KURSK
+                   LVBAP-CMKUA
+                   'M'
+                   'M'
+          CHANGING VBKREDET-KWKKC.
+      ENDIF.
+      IF NOT VBKREDET-KWKKG IS INITIAL AND
+         NOT XVBKRED-CMWAE  IS INITIAL.
+        CLEAR:     XVBKD-KURSK.
+        PERFORM STAT_CURR_CONVERT_EX(RMCS1000)
+          USING    VBKREDET-KWKKG
+                   XLIKP-ERDAT
+                   LVBAP-ERDAT
+                   LVBAP-WAERK
+                   T001-WAERS
+                   XVBKRED-CMWAE
+                   XVBKD-KURSK
+                   LVBAP-CMKUA
+                   'M'
+                   'M'
+          CHANGING VBKREDET-KWKKG.
+      ENDIF.
+      MOVE VBKREDET-KWKKC TO VBKREDET-KWKKB.
+      MOVE VBKREDET-KWKKG TO VBKREDET-KWKKF.
+      MOVE VBKREDET TO XVBKREDET.
+      APPEND XVBKREDET.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.                    "VBKREDET_FUELLEN
+
+*---------------------------------------------------------------------*
+*       FORM VBUK_LESEN                                               *
+*---------------------------------------------------------------------*
+*       Belegkopf wird gelesen und in die interne Arbeitstabelle      *
+*       abgelegt                                                      *
+*---------------------------------------------------------------------*
+FORM VBUK_LESEN.
+  DATA: TABLE_SIZE LIKE SY-TFILL.
+
+  CLEAR RC.
+  REFRESH XVBELN.
+  REFRESH YVBELN.
+
+* Ermitteln Belege über angegebenen Matchcode
+  IF NOT ( ORDER IS INITIAL ).
+    IF FLG_TABELLE EQ CON_MACO.
+      PERFORM MATCHCODE_LESEN USING 'VMVA' 'H'.
+    ENDIF.
+    IF RC = 0.
+* Belegkoepfe werden im 100-Block gelesen.
+      DO.
+        PERFORM YVBELN_FUELLEN.
+
+        SELECT * FROM VBUK APPENDING TABLE XVBUK WHERE VBELN IN YVBELN
+                                                 AND   GBSTK IN GBSTK
+                                                 AND   CMGST IN CMGST
+                                             AND VBOBJ = VERKAUFSBELEG
+        ORDER BY PRIMARY KEY.
+* Sind keine Belege mehr vorggeben, wird die Selektionsschleife
+* verlassen.
+        DESCRIBE TABLE XVBELN LINES SY-TFILL.
+        IF SY-TFILL = 0.
+          EXIT.
+        ENDIF.
+      ENDDO.
+    ENDIF.
+  ENDIF.
+
+* Lieferungen
+  IF NOT ( DELIV IS INITIAL ).
+    REFRESH XVBELN.
+    REFRESH YVBELN.
+    IF FLG_TABELLE EQ CON_MACO.
+      PERFORM MATCHCODE_LESEN USING 'VMVL' 'D'.
+    ENDIF.
+    IF RC = 0.
+* Belegkoepfe werden im 100-Block gelesen.
+      DO.
+        PERFORM YVBELN_FUELLEN.
+        SELECT * FROM VBUK APPENDING TABLE XVBUK WHERE VBELN IN YVBELN
+                                                 AND   GBSTK IN GBSTK
+                                                 AND   CMGST IN CMGST
+                                                 AND   VBOBJ = LIEFERUNG
+        ORDER BY PRIMARY KEY.
+* Sind keine Belege mehr vorggeben, wird die Selektionsschleife
+* verlassen.
+        DESCRIBE TABLE XVBELN LINES SY-TFILL.
+        IF SY-TFILL = 0.
+          EXIT.
+        ENDIF.
+      ENDDO.
+    ENDIF.
+  ENDIF.
+  SORT XVBUK BY MANDT VBELN.
+ENDFORM.                    "VBUK_LESEN
+
+*---------------------------------------------------------------------*
+*       FORM YVBELN_FUELLEN                                           *
+*---------------------------------------------------------------------*
+*       Fuellen Selektionstabelle Beleg im 100-Block                  *
+*---------------------------------------------------------------------*
+FORM YVBELN_FUELLEN.
+  REFRESH YVBELN.
+  DESCRIBE TABLE XVBELN LINES SY-TFILL.
+  IF SY-TFILL = 0.
+    DESCRIBE TABLE VBELN LINES SY-TFILL.
+    IF SY-TFILL > 0.
+      XVBELN[] = VBELN[].
+    ENDIF.
+  ENDIF.
+
+  IF SY-TFILL > 100.
+    TABLE_SIZE = 100.
+  ELSE.
+    TABLE_SIZE = SY-TFILL.
+  ENDIF.
+
+
+* Füllen Selektionstabelle für die Belege
+  DO TABLE_SIZE TIMES.
+    READ TABLE XVBELN INDEX 1.
+    YVBELN = XVBELN.
+    APPEND YVBELN.
+    DELETE XVBELN INDEX 1.
+  ENDDO.
+ENDFORM.                    "YVBELN_FUELLEN
+
+*---------------------------------------------------------------------*
+*       FORM STATUS_ERMITTELN                                         *
+*---------------------------------------------------------------------*
+*       Ermitteln Text, des ersten nicht OK-Status                    *
+*---------------------------------------------------------------------*
+FORM STATUS_ERMITTELN.
+
+  VBUK = XVBUK.
+  CALL FUNCTION 'SD_FIRST_CREDIT_STATUS'
+    EXPORTING
+      XVBUK  = VBUK
+    IMPORTING
+      STATUS = XVBKRED-CSTAT.
+ENDFORM.                    "STATUS_ERMITTELN
+
+*---------------------------------------------------------------------*
+*       FORM CREDIT_EXPOSURE                                          *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM CREDIT_EXPOSURE.
+* FSCM: SAP Credit Management
+    STATICS: sv_cm_checked,
+             sv_cm_message,
+             sv_ukm_active,
+             sv_ukm_erp2005.
+
+    IF sv_cm_checked IS INITIAL.
+      CALL FUNCTION 'UKM_IS_ACTIVE'
+        IMPORTING
+          e_active  = sv_ukm_active
+          e_erp2005 = sv_ukm_erp2005.
+      sv_cm_checked = 'X'.
+    ENDIF.
+IF sv_ukm_erp2005 IS INITIAL.
+ ON CHANGE OF XVBKRED-KNKLI
+  OR           XVBKRED-KKBER.
+    LOOP AT XKNKK WHERE KNKLI = XVBKRED-KNKLI
+                  AND   KKBER = XVBKRED-KKBER.
+      EXIT.
+    ENDLOOP.
+    IF SY-SUBRC = 0.
+      MOVE-CORRESPONDING XKNKK TO XVBKRED.
+    ELSE.
+      CALL FUNCTION 'CREDIT_EXPOSURE'
+        EXPORTING
+          KKBER         = XVBKRED-KKBER
+          KUNNR         = XVBKRED-KNKLI
+        IMPORTING
+          PERCENTAGE    = XVBKRED-KLPRZ
+          OPEN_DELIVERY = XVBKRED-OLIKW
+          OPEN_INVOICE  = XVBKRED-OFAKW
+          OPEN_ORDER    = XVBKRED-OEIKW
+          E_KNKK        = KNKK.
+      IF KNKK IS INITIAL.
+        PERFORM CREDIT_NEW_CUSTOMER_DATA(SAPLVKMP)          "K11K100948
+          USING    XVBKRED-KKBER XVBKRED-KNKLI              "K11K100948
+          CHANGING KNKK.                                    "K11K100948
+      ENDIF.                                                "K11K100948
+      MOVE-CORRESPONDING KNKK TO XVBKRED.
+      MOVE-CORRESPONDING XVBKRED TO XKNKK.
+      APPEND XKNKK.
+    ENDIF.
+  ELSE.
+    MOVE-CORRESPONDING XKNKK TO XVBKRED.
+  ENDON.
+ ENDIF.
+ENDFORM.                    "CREDIT_EXPOSURE
+
+*---------------------------------------------------------------------*
+*       FORM ZAHLUNGSBEDINGUNGEN_ERMITTELN                            *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  BELEG                                                         *
+*  -->  VALUE                                                         *
+*  -->  (POSITION)                                                    *
+*  -->  ZBED                                                          *
+*---------------------------------------------------------------------*
+FORM ZAHLUNGSBEDINGUNGEN_ERMITTELN USING BELEG
+                                   VALUE(POSITION)
+                                   ZBED.
+  IF POSITION IS INITIAL.
+    POSITION     = '000000'.
+  ENDIF.
+  POSITIONS_KEY-MANDT = SY-MANDT.
+  POSITIONS_KEY-VBELN = BELEG.
+  POSITIONS_KEY-POSNR = POSITION.
+  READ TABLE XVBKD WITH KEY POSITIONS_KEY BINARY SEARCH.
+  IF SY-SUBRC NE 0.
+    SELECT * FROM VBKD APPENDING TABLE XVBKD
+                       WHERE VBELN = BELEG
+                       AND   POSNR = POSITION.
+    SORT XVBKD.
+    READ TABLE XVBKD WITH KEY POSITIONS_KEY BINARY SEARCH.
+  ENDIF.
+  ZBED         = XVBKD-ZTERM.
+ENDFORM.                    "ZAHLUNGSBEDINGUNGEN_ERMITTELN
+INCLUDE DBKMVF01.                      " SAP - Routinen Matchcode
+INCLUDE DBKMVF02.                      " Kunden - Routinen
+
+*--------------------------------------------------------------------*
+* Authority Check for table VBKRED
+*--------------------------------------------------------------------*
+* FORM AUTHORITYCHECK_VBKRED.
+*   AUTHORITY-CHECK ...
+* ENDFORM.                             "AUTHORITYCHECK_VBKRED
+
+*--------------------------------------------------------------------*
+* PUT_KMV_MATCHCODE.
+* Processed when matchcode selection is used,
+* i.e. user input into PARAMETERS p_mc AS MATCHCODE STRUCTURE.
+*--------------------------------------------------------------------*
+* FORM PUT_KMV_MATCHCODE.
+* ENDFORM.                             " PUT_KMV_MATCHCODE
+
+FORM CREDIT_RESCHEDULING_GET_DB USING US_VBELN US_TYP.
+* US_TYP: A order, L = delivery
+* this routine gets all open order and delivery credit values of all
+* documents (orders) which are rechecked
+  IF US_TYP = 'A'.
+    REFRESH MCINF. CLEAR MCINF.
+    MOVE 'S066'  TO MCINF-LOW.
+    MOVE 'I'     TO MCINF-SIGN.
+    MOVE 'EQ'    TO MCINF-OPTION.
+    APPEND MCINF.
+
+    CLEAR DVBUK.
+    REFRESH DVBUK.
+    CLEAR DVBUP.
+    REFRESH DVBUP.
+    CLEAR DVBAK.
+    REFRESH DVBAK.
+    CLEAR DVBAP.
+    REFRESH DVBAP.
+    CLEAR DVBEP.
+    REFRESH DVBEP.
+    CLEAR DVBPA.
+    REFRESH DVBPA.
+    REFRESH DVBFA.
+    CLEAR DVBAPF.
+    REFRESH DVBAPF.
+    CLEAR DVBKD.
+    REFRESH DVBKD.
+
+    LOOP AT XVBAK WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBAK TO: DVBAK, EVBAK.
+      APPEND DVBAK.
+      APPEND EVBAK.
+    ENDLOOP.
+
+    LOOP AT XVBUK WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBUK TO DVBUK.
+      DVBUK-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBUK.
+    ENDLOOP.
+
+    LOOP AT XVBUP WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBUP TO DVBUP.
+      DVBUP-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBUP.
+    ENDLOOP.
+
+    LOOP AT XVBAP WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBAP TO DVBAP.
+      DVBAP-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBAP.
+    ENDLOOP.
+
+    LOOP AT XVBEP WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBEP TO DVBEP.
+      DVBEP-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBEP.
+    ENDLOOP.
+
+    LOOP AT XVBFA INTO DVBFA WHERE VBELV EQ US_VBELN.
+      DVBFA-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBFA.
+    ENDLOOP.
+
+    LOOP AT XVBAPF WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBAPF TO DVBAPF.
+      APPEND DVBAPF.
+    ENDLOOP.
+
+    LOOP AT XVBKD WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBKD TO DVBKD.
+      DVBKD-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBKD.
+    ENDLOOP.
+
+    MCCONTROL-SPROG = 'SAPLVKMP'.
+    CLEAR MCCONTROL-SROUT.
+    MCCONTROL-SROUT = 'DBL_'.
+    CALL FUNCTION 'MCV_STATISTICS_ORDER'
+      EXPORTING
+        TRTYP       = 'V'
+        XVBAK       = DVBAK
+        YVBAK       = EVBAK
+        XVBAK_UPDKZ = CON_UPDKZ_INSERT
+        YVBAK_UPDKZ = SPACE
+        MODUS       = CON_MODUS_SIM  "Simulation
+        SPROG       = MCCONTROL-SPROG
+        SROUT       = MCCONTROL-SROUT
+        POSITION    = SPACE
+      TABLES
+        XKOMV       = DKOMV
+        XVBAP       = DVBAP
+        XVBEP       = DVBEP
+        XVBKD       = DVBKD
+        XVBPA       = DVBPA
+        XVBFA       = DVBFA
+        XVBUK       = DVBUK
+        XVBUP       = DVBUP
+        YVBAP       = EVBAP
+        YVBEP       = EVBEP
+        YVBKD       = EVBKD
+        YVBPA       = EVBPA
+        YVBFA       = EVBFA
+        YVBUK       = EVBUK
+        YVBUP       = EVBUP
+        VBAPF       = DVBAPF
+        MCINF       = MCINF.
+  ELSE.
+    CLEAR DLIKP.
+    REFRESH DLIKP.
+    CLEAR DLIPS.
+    REFRESH DLIPS.
+    CLEAR DVBUK.
+    REFRESH DVBUK.
+    CLEAR DVBUP.
+    REFRESH DVBUP.
+    CLEAR DVBAK.
+    REFRESH DVBAK.
+    CLEAR DVBAP.
+    CLEAR DVBAP.
+    REFRESH DVBAP.
+    CLEAR DVBPA.
+    REFRESH DVBPA.
+    REFRESH DVBFA.
+
+    LOOP AT XLIKP WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XLIKP TO: DLIKP, LIKP.
+      APPEND DLIKP.
+    ENDLOOP.
+
+    LOOP AT XVBUK WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBUK TO DVBUK.
+      DVBUK-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBUK.
+    ENDLOOP.
+
+    LOOP AT XVBUP WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING XVBUP TO DVBUP.
+      DVBUP-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBUP.
+    ENDLOOP.
+
+    LOOP AT LLIPS WHERE VBELN EQ US_VBELN.
+      MOVE-CORRESPONDING LLIPS TO DLIPS.
+      DLIPS-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DLIPS.
+    ENDLOOP.
+
+    LOOP AT XVBFA INTO DVBFA WHERE VBELV EQ US_VBELN.
+      DVBFA-UPDKZ = CON_UPDKZ_INSERT.
+      APPEND DVBFA.
+    ENDLOOP.
+
+    MOVE 'S067'  TO MCINF-LOW.
+    MOVE 'I'     TO MCINF-SIGN.
+    MOVE 'EQ'    TO MCINF-OPTION.
+    APPEND MCINF.
+
+    MCCONTROL-SPROG = 'SAPLVKMP'.
+    CLEAR MCCONTROL-SROUT.
+    MCCONTROL-SROUT = 'DBL_'.
+    CALL FUNCTION 'MCV_STATISTICS_DELIVERY'
+      EXPORTING
+        LIKP        = LIKP
+        TRTYP       = 'V'
+        YLIKP       = LIKP
+        YLIKP_UPDKZ = ' '
+        MODUS       = CON_MODUS_SIM  "Simulation
+        SPROG       = MCCONTROL-SPROG
+        SROUT       = MCCONTROL-SROUT
+      TABLES
+        XLIKP       = DLIKP
+        XVBUK       = DVBUK
+        XVBPA       = DVBPA
+        YVBUK       = EVBUK
+        YVBPA       = EVBPA
+        XLIPS       = DLIPS
+        XVBUP       = DVBUP
+        XVBFA       = DVBFA
+        YLIPS       = ELIPS
+        YVBUP       = EVBUP
+        YVBFA       = EVBFA
+        XVBAK       = EVBAK
+        XVBAP       = EVBAP
+        MCINF       = MCINF.
+  ENDIF.
+*
+  PERFORM SET_VBELN_INTO_DB_S066(SAPLVKMP) USING US_VBELN US_TYP.
+ENDFORM.                    "CREDIT_RESCHEDULING_GET_DB
+
+*---------------------------------------------------------------------*
+*       FORM VBAK_ODER_VBUK                                           *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  CH_TABELLE                                                    *
+*---------------------------------------------------------------------*
+FORM VBAK_ODER_VBUK CHANGING CH_TABELLE.
+  DATA: SAV_LINES_KKBER LIKE SY-TABIX,
+        SAV_LINES_KNKLI LIKE SY-TABIX,
+        SAV_LINES_CTLPC LIKE SY-TABIX,
+        SAV_LINES_SBGRP LIKE SY-TABIX,
+        SAV_LINES_GRUPP LIKE SY-TABIX,
+        SAV_LINES_VBELN LIKE SY-TABIX,
+        SAV_LINES_CMGST LIKE SY-TABIX,
+        SAV_LINES_GBSTK LIKE SY-TABIX,
+        SAV_LINES_CMNGV LIKE SY-TABIX,
+        SAV_LINES_CMNUP LIKE SY-TABIX.
+  DATA: CMGST_A_FLAG.
+
+  DESCRIBE TABLE KKBER LINES SAV_LINES_KKBER.
+  DESCRIBE TABLE KNKLI LINES SAV_LINES_KNKLI.
+  DESCRIBE TABLE CTLPC LINES SAV_LINES_CTLPC.
+  DESCRIBE TABLE SBGRP LINES SAV_LINES_SBGRP.
+  DESCRIBE TABLE GRUPP LINES SAV_LINES_GRUPP.
+  DESCRIBE TABLE VBELN LINES SAV_LINES_VBELN.
+  DESCRIBE TABLE CMGST LINES SAV_LINES_CMGST.
+  DESCRIBE TABLE GBSTK LINES SAV_LINES_GBSTK.
+  DESCRIBE TABLE CMNGV LINES SAV_LINES_CMNGV.
+  DESCRIBE TABLE CMNUP LINES SAV_LINES_CMNUP.
+
+
+* Zugriff über Matchcode ?
+* Bedingungen und VBELN
+* Kreditstatus CMGST nicht 'A' und nicht ' '
+  IF 'A' IN CMGST.
+    CMGST_A_FLAG = 'X'.
+  ENDIF.
+  IF ' ' IN CMGST.
+    CMGST_A_FLAG = 'X'.
+  ENDIF.
+* Beleggesamtstatus GBSTK nicht ' ' und nicht 'C'
+  IF ' ' IN GBSTK.
+    CMGST_A_FLAG = 'X'.
+  ENDIF.
+  IF 'C' IN GBSTK.
+    CMGST_A_FLAG = 'X'.
+  ENDIF.
+  DESCRIBE TABLE VBELN LINES SAV_LINES_VBELN.
+  IF SAV_LINES_VBELN = 0 AND CMGST_A_FLAG IS INITIAL.
+    MOVE CON_MACO TO CH_TABELLE.
+    EXIT.
+  ENDIF.
+
+* Zugriff über VBUK ?
+* CMGST oder GBSTK oder VBELN, alle anderen INITIAL
+  IF SAV_LINES_KKBER IS INITIAL AND
+     SAV_LINES_KNKLI IS INITIAL AND
+     SAV_LINES_CTLPC IS INITIAL AND
+     SAV_LINES_SBGRP IS INITIAL AND
+     SAV_LINES_GRUPP IS INITIAL AND
+     SAV_LINES_CMNGV IS INITIAL AND
+     SAV_LINES_CMNUP IS INITIAL AND
+     ( NOT SAV_LINES_CMGST IS INITIAL OR
+       NOT SAV_LINES_GBSTK IS INITIAL OR
+       NOT SAV_LINES_VBELN IS INITIAL ).
+    MOVE CON_VBUK TO CH_TABELLE.
+    EXIT.
+  ENDIF.
+
+* Zugriff über VBAK/LIKP ?
+* ansonsten
+  MOVE CON_VBAK TO CH_TABELLE.
+ENDFORM.                    "VBAK_ODER_VBUK
+
+*---------------------------------------------------------------------*
+*       FORM VBAK_LESEN_VOR_VBUK                                      *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM VBAK_LESEN_VOR_VBUK.
+  IF NOT ( ORDER IS INITIAL ).
+*   Lesen Verkaufsbelege
+    SELECT * FROM VBAK APPENDING TABLE XVBAK
+      WHERE VBELN IN VBELN
+      AND   KKBER IN KKBER
+      AND   KNKLI IN KNKLI
+      AND   GRUPP IN GRUPP
+      AND   SBGRP IN SBGRP
+      AND   CTLPC IN CTLPC
+      AND   CMNGV IN CMNGV
+      AND   CMNUP IN CMNUP
+      AND   VKBUR IN VKBUR             "CCard
+      AND   VKGRP IN VKGRP             "CCard
+      AND   VKORG IN VKORG             "CCard
+      AND   VTWEG IN VTWEG             "CCard
+      AND   SPART IN SPART             "CCard
+      AND   ERNAM IN ERNAM             "CCard
+      AND   RPLNR IN RPLNR             "CCard
+      ORDER BY PRIMARY KEY.
+  ENDIF.
+ENDFORM.                    "VBAK_LESEN_VOR_VBUK
+
+*---------------------------------------------------------------------*
+*       FORM LIKP_LESEN_VOR_VBUK                                      *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM LIKP_LESEN_VOR_VBUK.
+  IF NOT ( DELIV IS INITIAL ).
+*   Lesen Lieferbelege
+    SELECT * FROM LIKP APPENDING TABLE XLIKP
+      WHERE VBELN IN VBELN
+      AND   KKBER IN KKBER
+      AND   KNKLI IN KNKLI
+      AND   GRUPP IN GRUPP
+      AND   SBGRP IN SBGRP
+      AND   CTLPC IN CTLPC
+      AND   CMNGV IN CMNGV
+      AND   VKORG IN VKORG             "CCard
+      AND   VKBUR IN VKBUR             "CCard
+      AND   ERNAM IN ERNAM             "CCard
+*     and   rplnr in rplnr                "CCard
+      AND   VBTYP NOT IN ('7', 'g')
+      ORDER BY PRIMARY KEY.
+* Check that the previous document has payment cards
+    IF CARDMODE = 'X'.                 "CCard
+    DATA: DELETE_FLAG.
+      LOOP AT XLIKP.
+        DELETE_FLAG = 'X'.
+        SELECT * FROM LIPS
+               WHERE VBELN = XLIKP-VBELN.
+          IF NOT LIPS-VGBEL IS INITIAL AND
+             NOT LIPS-ABFOR IS INITIAL.
+            SELECT SINGLE * FROM VBAK
+                   WHERE VBELN = LIPS-VGBEL
+                   AND   RPLNR IN RPLNR.
+            IF SY-SUBRC = 0.
+              DELETE_FLAG = ' '.
+              EXIT.
+            ENDIF.
+          ENDIF.
+         ENDSELECT.
+         IF DELETE_FLAG = 'X'.
+          DELETE XLIKP.
+        ENDIF.
+    ENDLOOP.
+  ENDIF.
+  ENDIF.
+ENDFORM.                    "LIKP_LESEN_VOR_VBUK
+
+*---------------------------------------------------------------------*
+*       FORM VBUK_LESEN_NACH_VBAK                                     *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM VBUK_LESEN_NACH_VBAK.
+  DATA: TABLE_SIZE LIKE SY-TFILL.
+
+  REFRESH XVBELN.
+
+* Füllen Selektionstabelle für die Belege.
+  LOOP AT XVBAK.
+    XVBELN-LOW = XVBAK-VBELN.
+    XVBELN-SIGN = 'I'.
+    XVBELN-OPTION = 'EQ'.
+    APPEND XVBELN.
+  ENDLOOP.
+  LOOP AT XLIKP.
+    XVBELN-LOW = XLIKP-VBELN.
+    XVBELN-SIGN = 'I'.
+    XVBELN-OPTION = 'EQ'.
+    APPEND XVBELN.
+  ENDLOOP.
+
+  DESCRIBE TABLE XVBELN LINES SY-TABIX.
+  CHECK SY-TABIX GT 0.
+  SORT XVBELN.
+
+* Belegkoepfe werden im 100-Block gelesen.
+  DO.
+    PERFORM YVBELN_FUELLEN.
+
+*   Lesen VBUK
+    SELECT * FROM VBUK APPENDING TABLE XVBUK WHERE VBELN IN YVBELN
+                                             AND   CMGST IN CMGST
+                                             AND   GBSTK IN GBSTK
+        ORDER BY PRIMARY KEY.
+
+*   Sind keine Belege mehr vorggeben, wird die Selektionsschleife
+*   verlassen.
+    DESCRIBE TABLE XVBELN LINES SY-TFILL.
+    IF SY-TFILL = 0.
+      EXIT.
+    ENDIF.
+  ENDDO.
+ENDFORM.                    "VBUK_LESEN_NACH_VBAK
+
+*---------------------------------------------------------------------*
+*       FORM WKV_VBKREDET_ERGAENZEN                                   *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  CH_VBKREDET                                                   *
+*---------------------------------------------------------------------*
+FORM WKV_VBKREDET_ERGAENZEN CHANGING CH_VBKREDET STRUCTURE VBKREDET.
+* Zulesen externe Daten (WKV)
+  CALL FUNCTION 'BF_FUNCTIONS_FIND'
+    EXPORTING
+      I_EVENT       = CON_EVENT_CREDIT_CLEARING
+    TABLES
+      T_FMRFC       = FMTAB
+    EXCEPTIONS
+      NOTHING_FOUND = 4.
+  IF SY-SUBRC = 4.
+    EXIT.
+  ELSE.
+    LOOP AT FMTAB.
+      CALL FUNCTION FMTAB-FUNCT
+        EXPORTING
+          DOCUMENT_NUMBER      = CH_VBKREDET-VBELN
+          DOCUMENT_ITEM_NUMBER = CH_VBKREDET-POSNR
+        CHANGING
+          CONTRACT_DATA        = CH_VBKREDET
+        EXCEPTIONS
+          OTHERS               = 0.
+    ENDLOOP.
+  ENDIF.
+ENDFORM.                    "WKV_VBKREDET_ERGAENZEN
+
+*&---------------------------------------------------------------------*
+*&      Form  CC_STATUS_ERMITTELN
+*&---------------------------------------------------------------------*
+*       Texte fur Zahlungskarten FPLA-Statusfelder ermitteln
+*----------------------------------------------------------------------*
+*       -->  XVBKRED
+*----------------------------------------------------------------------*
+FORM CC_STATUS_ERMITTELN.              "CCARD
+
+  DATA: DA_FPLA LIKE FPLA.
+
+  MOVE-CORRESPONDING XVBKRED TO DA_FPLA.
+  CALL FUNCTION 'SD_CCARD_LIST_FPLA_TEXTS'
+    EXPORTING
+      FPLA_I     = DA_FPLA
+    IMPORTING
+      AUST1TXT_E = XVBKRED-AUST1TXT
+      AUST2TXT_E = XVBKRED-AUST2TXT
+      AUST3TXT_E = XVBKRED-AUST3TXT.
+
+ENDFORM.                               " CC_STATUS_ERMITTELN
