@@ -1,0 +1,310 @@
+@AbapCatalog.compiler.compareFilter: true
+@AbapCatalog.preserveKey: true
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AbapCatalog.sqlViewName: 'ZCREDITARDISPLAY'
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Credit account receivable display'
+@Metadata.allowExtensions:true
+@UI.headerInfo : {
+         typeName: 'Credit Display', typeNamePlural: 'Credit-AR display'
+                 }
+@ObjectModel.usageType:{
+    serviceQuality: #X,
+    sizeCategory: #S,
+    dataClass: #MIXED
+}
+define view ZRTR_CREDIT_AR_DISPLAY
+  with parameters
+    @EndUserText.label: 'Customer'
+    //@Consumption.valueHelpDefinition:[{entity:{element:'Customer' ,name:'I_CUSTOMER'}}] //search help added for customer for INC0216813
+    @Consumption.valueHelpDefinition:[{entity:{element:'Kunnr' ,name:'zi_customer_f4'}}]
+
+    P_CUSTOMER              : kunnr,
+
+    @EndUserText.label: 'Company Code'
+    @Consumption.valueHelpDefinition: [{entity:{ element:'CompanyCode', name: 'I_CompanyCode' } }] //search help added for company code for INC0216813
+    P_COMPANYCODE           : bukrs,
+
+    @EndUserText.label: 'Key Date'
+    P_KeyDate               : vdm_v_key_date,
+
+    @Consumption.defaultValue: '30'
+    P_NetDueInterval1InDays : farp_net_due_interval1,
+
+    @Consumption.defaultValue: '60'
+    P_NetDueInterval2InDays : farp_net_due_interval2,
+    @Consumption.defaultValue: '90'
+
+    P_NetDueInterval3InDays : farp_net_due_interval3,
+
+    @Consumption.defaultValue: 'USD'
+    P_DisplayCurrency       : vdm_v_display_currency,
+
+    @Consumption.defaultValue: 'M'
+    P_ExchangeRateType      : kurst_curr
+
+  as select distinct from I_Customer                                          as CUST
+
+  //as select distinct from ZRTR_CREDIT_AR_PARAMETERS(P_CUSTOMER            :  $parameters.P_CUSTOMER,
+    left outer join       ZRTR_CREDIT_AR_PARAMETERS(P_CUSTOMER            :  $parameters.P_CUSTOMER,
+                                                            P_COMPANYCODE          :  $parameters.P_COMPANYCODE,
+                                                            P_KeyDate              :  $parameters.P_KeyDate,
+                                                            P_NetDueInterval1InDays:  $parameters.P_NetDueInterval1InDays,
+                                                            P_NetDueInterval2InDays:  $parameters.P_NetDueInterval2InDays,
+                                                            P_NetDueInterval3InDays:  $parameters.P_NetDueInterval3InDays,
+                                                            P_DisplayCurrency      :  $parameters.P_DisplayCurrency,
+                                                            P_ExchangeRateType     :  $parameters.P_ExchangeRateType)
+
+                                                                              as report                   on report.Customer = CUST.Customer
+
+    left outer join       ZRTR_CREDIT_PARAMETERS(P_CUSTOMER            :  $parameters.P_CUSTOMER,
+                                                 P_COMPANYCODE :          $parameters.P_COMPANYCODE,
+                          ////union all,
+                                              P_KeyDate:                $parameters.P_KeyDate,
+                                              P_NetDueInterval1InDays:  $parameters.P_NetDueInterval1InDays,
+                                              P_NetDueInterval2InDays:  $parameters.P_NetDueInterval2InDays,
+                                              P_NetDueInterval3InDays:  $parameters.P_NetDueInterval3InDays,
+                                              P_DisplayCurrency:        $parameters.P_DisplayCurrency,
+                                              P_ExchangeRateType:       $parameters.P_ExchangeRateType)
+
+                                                                              as main1                    on  main1.CompanyCode = report.CompanyCode
+                                                                                                          and main1.Customer    = report.Customer
+
+
+  //      inner join I_Customer   as CUST
+  //      on report.Customer = CUST.Customer
+    left outer join       bsid_view                                           as _bview                   on(
+                        report.CompanyCode  = _bview.bukrs
+                        and report.Customer = _bview.kunnr
+                      )
+
+    inner join            kna1                                                as _kna1                    on _kna1.kunnr = CUST.Customer
+
+    left outer join       vbrk                                                as _vbrk                    on _bview.vbeln = _vbrk.vbeln
+
+    left outer join       vbak                                                as _vbak                    on  _vbak.kunnr = report.Customer
+                                                                                                          and _vbak.erdat = _kna1.erdat
+
+    left outer join       ukmbp_cms_sgm                                       as credit                   on  CUST.Customer       = credit.partner
+                                                                                                          and credit.credit_sgmnt = $parameters.P_COMPANYCODE
+
+    left outer join       ukmbp_cms                                           as credit1                  on credit1.partner = CUST.Customer
+
+    left outer join       but050                                              as _but050_CA               on  _but050_CA.partner1 =    CUST.Customer //_cms.partner
+                                                                                                          and _but050_CA.reltyp   =    'BUR001'
+                                                                                                          and _but050_CA.partner2 like 'CRED%'
+
+    left outer join       I_CrdtMPaytBehaviorBySndr                           as _CrdtMPaytBehaviorBySndr on  _CrdtMPaytBehaviorBySndr.BusinessPartner = report.Customer
+                                                                                                          and _CrdtMPaytBehaviorBySndr.CreditSegment   = report.CompanyCode
+
+    left outer join       ukm_totals                                          as credit2                  on  credit2.partner      = CUST.Customer
+                                                                                                          and credit2.credit_sgmnt = $parameters.P_COMPANYCODE //report.CompanyCode
+
+    left outer join       ZRTR_ZAP6 (P_KeyDate : $parameters.P_KeyDate)       as _arbal                   on  _arbal.bukrs = $parameters.P_COMPANYCODE //report.CompanyCode
+                                                                                                          and _arbal.kunnr = $parameters.P_CUSTOMER //report.Customer
+
+    left outer join       ZRTR_CREDIT_OPEN_ORDER                              as main2                    on  main2.partner      = $parameters.P_CUSTOMER //report.Customer
+                                                                                                          and main2.credit_sgmnt = $parameters.P_COMPANYCODE //report.CompanyCode
+                                                                                                          and main2.comm_typ     = '100'
+    left outer join       ZRTR_CREDIT_OPEN_ORDER                              as main3                    on  main3.partner      = $parameters.P_CUSTOMER //.Customer
+                                                                                                          and main3.credit_sgmnt = $parameters.P_COMPANYCODE //report.CompanyCode
+                                                                                                          and main3.comm_typ     = '400'
+    left outer join       ZRTR_AR_ONHOLD                                      as main4                    on  main4.kunnr    = $parameters.P_CUSTOMER //report.Customer
+                                                                                                          and main4.bukrs_vf = $parameters.P_COMPANYCODE //report.CompanyCode
+
+    left outer join       ZRTR_AR_YTDSALES (P_COMPANYCODE : $parameters.P_COMPANYCODE,
+                                         P_KeyDate   : $parameters.P_KeyDate) as knc1                     on knc1.Customer = $parameters.P_CUSTOMER //report.Customer
+
+    left outer join       ZRTR_AR_AVERAGEDAYS                                 as knb4                     on  CUST.Customer    = knb4.customer
+                                                                                                          and knb4.companycode = $parameters.P_COMPANYCODE //report.CompanyCode
+
+    left outer join       ukm_item                                            as u                        on  u.credit_sgmnt = report.CompanyCode
+                                                                                                          and u.partner      = $parameters.P_CUSTOMER //report.Customer
+
+    left outer join       ZRTR_PREVIOUS_YEARSALE  (P_COMPANYCODE : $parameters.P_COMPANYCODE,
+                                         P_KeyDate   : $parameters.P_KeyDate) as _knc1                    on _knc1.Customer = $parameters.P_CUSTOMER //report.Customer
+
+{
+
+      @UI.lineItem: [{ position:10, label: 'Account' }]
+      @UI.identification: [{ position:10 }]
+
+  key report.Customer                                                                                                                     as Account, //Account
+
+      @UI.lineItem: [{ position:20, label: 'Aging Summary' }]
+      @UI.identification: [{ position:20 }]
+  key report.Customer                                                                                                                     as Aging_Summary, //Aging summary/Account
+
+      @UI.lineItem: [{ position:30, label: 'Company Code' }]
+      @UI.identification: [{ position:30 }]
+  key report.CompanyCode                                                                                                                  as CompanyCode, //Company Code
+
+      @UI.lineItem: [{ position:40, label: 'collection analyst' }]
+      @UI.identification: [{ position:40 }]
+      _but050_CA.partner2                                                                                                                 as Collection_Analyst,
+
+      @UI.lineItem: [{ position:50, label: 'AR Balance' }]
+      @UI.identification: [{ position:50 }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+
+      _arbal.dmbtr_total                                                                                                                  as AR_Balance,
+
+      @UI.lineItem: [{ position:60, label: 'Name of Customer' }]
+      @UI.identification: [{ position:60 }]
+      _kna1.name1                                                                                                                         as Name, // Name of customer
+
+      @UI.lineItem: [{ position:70, label: 'Account Created On' }]
+      @UI.identification: [{ position:70 }]
+      _kna1.erdat, // Amount created on
+
+      @UI.lineItem: [{ position:80, label: 'Credit Limit' }]
+      @UI.identification: [{ position:80 }]
+      credit.credit_limit, // Credit limit
+
+      @UI.lineItem: [{ position:90, label: 'Validity Date' }]
+      @UI.identification: [{ position:90 }]
+      credit.limit_valid_date                                                                                                             as ValidityDate, // Validity date
+
+      @UI.lineItem: [{ position:100, label: 'Resubmission On' }]
+      @UI.identification: [{ position:100 }]
+      credit.follow_up_dt                                                                                                                 as ResubmissionOn, // Resubmission On
+
+      @UI.lineItem: [{ position:110, label: 'Risk Catagory' }]
+      @UI.identification: [{ position:110 }]
+      credit1.risk_class                                                                                                                  as RiskCatagory, // Risk catagory
+
+      @UI.lineItem: [{ position:120, label: 'Credit Check Rule' }]
+      @UI.identification: [{ position:120 }]
+      credit1.check_rule                                                                                                                  as CreditCheckRule, // Credit Check Rule
+      main4.cmwae,
+      @UI.lineItem: [{ position:130, label: 'On_Hold' }]
+      @Semantics.amount.currencyCode: 'CMWAE'
+      main4.On_Hold, //On Hold
+
+      @UI.lineItem: [{ position:140, label: 'Open_Order' }]
+      main2.amt                                                                                                                           as Open_Order, //Open Order
+
+      @UI.lineItem: [{ position:150, label: 'Open Del Amt' }]
+      main3.amt                                                                                                                           as Open_Del, //Open Del
+
+      @UI.lineItem: [{ position:160, label: 'Display Currency' }]
+      @Semantics.currencyCode:true
+      report.DisplayCurrency, //Display Currency
+
+      @UI.lineItem: [{ position:170, label: 'Total AR($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      _arbal.dmbtr_total                                                                                                                  as Total_AR, //Total_AR
+
+      @UI.lineItem: [{ position:180, label: 'Not Due($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      main1.TotalNotOvrdAmtInDspCrcy                                                                                                      as Not_Due,
+
+      @UI.lineItem: [{ position:190, label: '01-30Days($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      main1.NetDueIntvl1AmtInDspCrcy,
+
+
+      @UI.lineItem: [{ position:200, label: '31-60Days($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      main1.NetDueIntvl2AmtInDspCrcy,
+
+      @UI.lineItem: [{ position:210, label: '61-90Days($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      main1.NetDueIntvl3AmtInDspCrcy,
+
+      @UI.lineItem: [{ position:220, label: 'Over90Days($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      main1.NetDueIntvl4AmtInDspCrcy,
+
+      @UI.lineItem: [{ position:230, label: 'TPD($)' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      @DefaultAggregation: #SUM
+      (main1.NetDueIntvl1AmtInDspCrcy + main1.NetDueIntvl2AmtInDspCrcy + main1.NetDueIntvl3AmtInDspCrcy + main1.NetDueIntvl4AmtInDspCrcy) as TPD,
+      @UI.lineItem: [{ position:240, label: 'H/C Sales Last 12M' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      knc1.umx                                                                                                                            as HCLast12,
+
+      @UI.lineItem: [{ position:250, label: 'YTD Sales' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      knc1.ytd_sales                                                                                                                      as YTDsales,
+
+      @UI.lineItem: [{ position:260, label: 'LY Sales' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      _knc1.previous_yearsale                                                                                                             as LY_sales,
+
+      @UI.lineItem: [{ position:270, label: 'AverageDaysInArrears' }]
+      case
+      when knb4.numarator = 0 or knb4.denominator = 0
+      then 0
+      else
+      division(knb4.numarator, knb4.denominator, 2 )
+      end                                                                                                                                 as AverageDaysInArrears,
+
+      @UI.lineItem: [{ position:280, label: 'Total Credit Exposure' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      (credit_limit-_arbal.dmbtr_total)                                                                                                   as TotalCreditExposure, //Total credit Exposure
+
+      @UI.lineItem: [{ position:290, label: 'Utilization %' }]
+      @Semantics.amount.currencyCode: 'DisplayCurrency'
+      (cast((( credit_limit-_arbal.dmbtr_total)*100)as abap.fltp) / cast( credit_limit as abap.fltp))                                     as UtilizationPercantage,
+
+      _CrdtMPaytBehaviorBySndr.SenderCurrency
+}
+
+where
+  CUST.Customer = $parameters.P_CUSTOMER
+
+group by
+  report.Customer,
+  CUST.CustomerFullName,
+  report.CompanyCode,
+  credit.credit_limit,
+  credit.limit_valid_date,
+  credit.follow_up_dt,
+  _bview.dmbtr,
+  credit1.risk_class,
+  credit1.check_rule,
+  CUST.CreationDate,
+  _but050_CA.partner2,
+  _bview.bukrs,
+  _CrdtMPaytBehaviorBySndr.DaysSalesOutstanding,
+  _CrdtMPaytBehaviorBySndr.TotLast12MnthsSlsAmtInSndrCrcy,
+  _CrdtMPaytBehaviorBySndr.LastPaymentDate,
+  _CrdtMPaytBehaviorBySndr.NoCshDiscAvgNrOfDaysInArrears,
+  _CrdtMPaytBehaviorBySndr.CshDiscClmAvgNrOfDaysInArrears,
+  _CrdtMPaytBehaviorBySndr.SenderCurrency,
+  report.DisplayCurrency,
+  report.TotalAmountInDisplayCrcy,
+  _vbak.cmps_cm,
+  _vbak.amtbl,
+  credit2.amount,
+  _kna1.name1,
+  _kna1.erdat,
+  _bview.kunnr,
+  report.NetDueIntvl1AmtInDspCrcy,
+  report.NetDueIntvl2AmtInDspCrcy,
+  report.NetDueIntvl3AmtInDspCrcy,
+  report.NetDueIntvl4AmtInDspCrcy,
+  _CrdtMPaytBehaviorBySndr.Last12MnthsMaxSlsAmtInSndrCrcy,
+  _arbal.dmbtr_total,
+  main2.amt,
+  main3.amt,
+  main4.On_Hold,
+  main4.cmwae,
+  main1.TotalNotOvrdAmtInDspCrcy,
+  main1.NetDueIntvl1AmtInDspCrcy,
+  main1.NetDueIntvl2AmtInDspCrcy,
+  main1.NetDueIntvl3AmtInDspCrcy,
+  main1.NetDueIntvl4AmtInDspCrcy,
+  knc1.umx,
+  knc1.ytd_sales,
+  knb4.numarator,
+  knb4.denominator,
+  _knc1.previous_yearsale
