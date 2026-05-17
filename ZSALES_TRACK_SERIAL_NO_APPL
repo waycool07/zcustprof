@@ -1,0 +1,531 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSALES_TRACK_SERIAL_NO_APPL
+*&---------------------------------------------------------------------*
+*---------------------------------------------------------------------*
+*       CLASS lcl_application  DEFINITION
+*---------------------------------------------------------------------*
+CLASS lcl_application DEFINITION CREATE PRIVATE.
+
+  PUBLIC SECTION.
+    CLASS-DATA:
+      application TYPE REF TO lcl_application.
+    CLASS-METHODS:
+      check_activity,
+      main.
+  PRIVATE SECTION.
+    TYPES:
+      t_matnr    TYPE RANGE OF matnr,
+      t_sernr    TYPE RANGE OF gernr,
+      t_fkdat    TYPE RANGE OF fkdat,
+      t_vbeln    TYPE RANGE OF vbeln_vf,
+      t_kunag    TYPE RANGE OF kunag,
+      t_kunwe    TYPE RANGE OF kunwe,
+      t_party3rd TYPE RANGE OF char80,
+      t_augru    TYPE RANGE OF augru,
+      BEGIN OF s_vbrk,
+        vbtyp    TYPE vbtyp,
+        fkdat    TYPE fkdat,
+      END OF s_vbrk,
+      BEGIN OF s_vbrp,
+        autyp    TYPE vbtyp,
+        vgtyp    TYPE vbtyp_v,
+        matnr    TYPE matnr,
+        fkimg    TYPE fkimg,
+      END OF s_vbrp,
+      BEGIN OF s_vbak,
+        auart    TYPE auart,
+        augru    TYPE augru,
+      END OF s_vbak,
+      BEGIN OF s_vbpa,
+        kunag    TYPE kunag,
+        kunwe    TYPE kunwe,
+      END OF s_vbpa,
+      BEGIN OF s_kna1,
+        name1	TYPE name1_gp,
+        stras TYPE stras_gp,
+        ort01	TYPE ort01_gp,
+        regio	TYPE regio,
+        pstlz	TYPE pstlz,
+        telf1 TYPE telf1,
+        telfx TYPE telfx,
+      END OF s_kna1,
+      BEGIN OF s_adrc,
+        name       TYPE ad_name1,
+        street     TYPE ad_street,
+        city1	     TYPE ad_city1,
+        region 	   TYPE regio,
+        post_code1 TYPE	ad_pstcd1,
+        tel_number TYPE ad_tlnmbr1,
+        fax_number TYPE ad_fxnmbr1,
+      END OF s_adrc,
+      BEGIN OF s_equi_objk,
+        sernr      TYPE gernr,
+        sernr_equi TYPE gernr,
+        sernr_objk TYPE gernr,
+      END OF s_equi_objk,
+      BEGIN OF s_stxh,
+        tdname_en TYPE tdobname,
+        tdname_fr TYPE tdobname,
+      END OF s_stxh,
+      BEGIN OF s_sales_track_sn,
+        vbeln_vf TYPE vbeln_vf,
+        posnr_vf TYPE posnr_vf,
+        vbeln_va TYPE vbeln_va,
+        posnr_va TYPE posnr_va.
+INCLUDE TYPE:
+        s_vbrk,
+        s_vbrp,
+        s_vbak,
+        s_vbpa,
+        s_kna1,
+        s_adrc,
+        s_equi_objk,
+        s_stxh.
+TYPES:  party3rd TYPE char80,
+        activity   TYPE char10,
+        counter    TYPE i,
+      END OF s_sales_track_sn,
+      t_sales_track_sn TYPE STANDARD TABLE OF s_sales_track_sn WITH NON-UNIQUE KEY vbeln_vf posnr_vf.
+    DATA:
+      _t_sales_track_sn     TYPE t_sales_track_sn.
+    METHODS:
+      constructor           IMPORTING iv_sale       TYPE abap_bool
+                                      iv_return     TYPE abap_bool
+                                      iv_cancel     TYPE abap_bool
+                                      it_matnr      TYPE t_matnr
+                                      it_sernr      TYPE t_sernr
+                                      it_fkdat      TYPE t_fkdat
+                                      it_vbeln      TYPE t_vbeln
+                                      it_kunag      TYPE t_kunag
+                                      it_kunwe      TYPE t_kunwe
+                                      it_party3rd   TYPE t_party3rd
+                                      it_augru      TYPE t_augru,
+      get_data              IMPORTING iv_sale       TYPE abap_bool
+                                      iv_return     TYPE abap_bool
+                                      iv_cancel     TYPE abap_bool
+                                      it_matnr      TYPE t_matnr
+                                      it_sernr      TYPE t_sernr
+                                      it_fkdat      TYPE t_fkdat
+                                      it_vbeln      TYPE t_vbeln
+                                      it_kunag      TYPE t_kunag
+                                      it_kunwe      TYPE t_kunwe
+                                      it_party3rd   TYPE t_party3rd
+                                      it_augru      TYPE t_augru
+                            RETURNING VALUE(rt_sales_track_sn)
+                                                    TYPE t_sales_track_sn,
+      mark_ds_w_o_sn        CHANGING ct_sales_track_sn
+                                                    TYPE t_sales_track_sn,
+      display_report,
+      double_click_document FOR EVENT double_click OF cl_salv_events_table IMPORTING row column.
+
+ENDCLASS.
+
+*---------------------------------------------------------------------*
+*       CLASS lcl_application  IMPLEMENTATION
+*---------------------------------------------------------------------*
+CLASS lcl_application IMPLEMENTATION.
+
+  DEFINE concatenate_where_condition.
+
+    CASE &1.
+    WHEN SPACE.
+      &1 = &2.
+    WHEN OTHERS.
+      CONCATENATE &1 &2 INTO &1 SEPARATED BY ' OR '.
+    ENDCASE.
+
+  END-OF-DEFINITION.
+
+  DEFINE update_party3rd.
+
+       CALL FUNCTION 'READ_TEXT'
+            EXPORTING
+                 id       = 'Z007'
+                 language = &1
+                 name     = &2
+                 object   = 'VBBK'
+            TABLES
+                 lines    = wt_lines
+            EXCEPTIONS
+                 others  = 1.
+       IF sy-subrc = 0.
+         READ TABLE wt_lines INTO wa_lines INDEX 1.
+         IF sy-subrc = 0.
+           wa_sales_track_sn-party3rd = wa_lines-tdline+0(46).
+           MODIFY rt_sales_track_sn FROM wa_sales_track_sn
+             TRANSPORTING party3rd WHERE vbeln_va = <sales_track_sn>-vbeln_va.
+         ENDIF.
+       ENDIF.
+
+  END-OF-DEFINITION.
+
+*---------------------------------------------------------------------*
+* check_activity
+*---------------------------------------------------------------------*
+  METHOD check_activity.
+
+    IF ( p_sale   = abap_false ) AND
+       ( p_return = abap_false ) AND
+       ( p_cancel = abap_false ).
+      SET CURSOR FIELD 'P_SALE'.
+      MESSAGE 'At least one Activity must be selected' TYPE 'E'.
+    ENDIF.
+
+  ENDMETHOD.
+
+*---------------------------------------------------------------------*
+* main
+*---------------------------------------------------------------------*
+  METHOD main.
+
+    CREATE OBJECT application
+      EXPORTING iv_sale     = p_sale
+                iv_return   = p_return
+                iv_cancel   = p_cancel
+                it_matnr    = s_matnr[]
+                it_sernr    = s_sernr[]
+                it_fkdat    = s_fkdat[]
+                it_vbeln    = s_vbeln[]
+                it_kunag    = s_kunag[]
+                it_kunwe    = s_kunwe[]
+                it_party3rd = s_3rd[]
+                it_augru    = s_augru[].
+    application->display_report( ).
+
+  ENDMETHOD.
+
+*---------------------------------------------------------------------*
+* constructor
+*---------------------------------------------------------------------*
+  METHOD constructor.
+
+    _t_sales_track_sn = get_data( iv_sale     = iv_sale
+                                  iv_return   = iv_return
+                                  iv_cancel   = iv_cancel
+                                  it_matnr    = it_matnr
+                                  it_sernr    = it_sernr
+                                  it_fkdat    = it_fkdat
+                                  it_vbeln    = it_vbeln
+                                  it_kunag    = it_kunag
+                                  it_kunwe    = it_kunwe
+                                  it_party3rd = it_party3rd
+                                  it_augru    = it_augru ).
+
+  ENDMETHOD.
+
+*---------------------------------------------------------------------*
+* get_data
+*---------------------------------------------------------------------*
+  METHOD get_data.
+  DATA: w_activity TYPE string.
+  DATA: wa_sales_track_sn TYPE s_sales_track_sn.
+  DATA: wa_lines TYPE tline,
+        wt_lines TYPE tline_t.
+  FIELD-SYMBOLS: <sales_track_sn> TYPE s_sales_track_sn.
+  CONSTANTS:
+    c_sale     TYPE string VALUE '( ( vbrp~autyp IN (''C'',''I'') ) AND ' &
+                                   '( vbrk~vbtyp =  ''M'' ) )',
+    c_return   TYPE string VALUE '( ( vbrp~autyp = ''H'' ) AND ' &
+                                   '( vbrk~vbtyp = ''O'' ) )',
+    c_cancel   TYPE string VALUE '( ( vbrp~autyp IN (''C'',''I'') ) AND ' &
+                                   '( vbrk~vbtyp = ''N'' ) )'.
+
+*   Prepare Activity Where selection condition
+    IF iv_sale = abap_true.
+      concatenate_where_condition: w_activity c_sale.
+    ENDIF.
+    IF iv_return = abap_true.
+      concatenate_where_condition: w_activity c_return.
+    ENDIF.
+    IF iv_cancel = abap_true.
+      concatenate_where_condition: w_activity c_cancel.
+    ENDIF.
+*   Select Data
+    SELECT vbrk~vbeln AS vbeln_vf vbrk~fkdat vbrk~vbtyp vbrk~vbtyp AS vbtyp
+           vbrp~posnr AS posnr_vf vbrp~vgtyp vbrp~autyp vbrp~aubel AS vbeln_va vbrp~aupos AS posnr_va vbrp~matnr vbrp~fkimg vbrp~vgtyp
+           vbak~auart vbak~augru vbak~kunnr AS kunag
+           vbpa~kunnr AS kunwe
+           kna1~name1 kna1~stras kna1~ort01  kna1~regio kna1~pstlz kna1~telf1 kna1~telfx
+           adrc~name1 AS name adrc~city1 adrc~street adrc~region adrc~post_code1 adrc~tel_number adrc~fax_number
+           equi~sernr AS sernr_equi
+           objk~sernr AS sernr_objk
+           stxh_e~tdname AS tdname_en
+           stxh_f~tdname AS tdname_fr
+    INTO CORRESPONDING FIELDS OF TABLE rt_sales_track_sn
+    FROM ( ( ( ( ( vbrp INNER JOIN vbak
+                                ON vbrp~aubel = vbak~vbeln
+                        INNER JOIN vbpa
+                                ON vbak~vbeln = vbpa~vbeln
+                        INNER JOIN adrc
+                                ON vbpa~adrnr = adrc~addrnumber
+                        INNER JOIN kna1
+                                ON vbak~kunnr = kna1~kunnr )
+                         LEFT JOIN z_eqbs_equi AS equi
+                                ON vbrp~aubel = equi~kdauf
+                               AND vbrp~aupos = equi~kdpos )
+                         LEFT JOIN z_ser01_objk AS objk
+                                ON vbrp~vgbel = objk~lief_nr
+                               AND vbrp~vgpos = objk~posnr )
+                        LEFT  JOIN zstxh_vbbk_z007e AS stxh_e
+                                ON vbrp~aubel = stxh_e~tdname )
+                        LEFT  JOIN zstxh_vbbk_z007f AS stxh_f
+                                ON vbrp~aubel = stxh_f~tdname )
+                      INNER JOIN vbrk
+                              ON vbrp~vbeln = vbrk~vbeln
+    WHERE (w_activity)
+      AND vbrk~rfbsk =  'C'
+      AND vbrk~vbeln IN it_vbeln
+      AND vbrk~fkdat IN it_fkdat
+      AND vbrp~matnr IN it_matnr
+      AND vbak~kunnr IN it_kunag
+      AND vbak~augru IN it_augru
+      AND vbpa~posnr =  '000000'
+      AND vbpa~parvw =  'WE'
+      AND vbpa~kunnr IN it_kunwe.
+*  Populate additional fields
+   LOOP AT rt_sales_track_sn ASSIGNING <sales_track_sn>.
+*    Activity
+     IF ( ( <sales_track_sn>-autyp = 'C' ) OR ( <sales_track_sn>-autyp = 'I' ) ) AND
+          ( <sales_track_sn>-vbtyp <> 'N' ).
+       <sales_track_sn>-activity = 'Sale'.
+     ELSEIF <sales_track_sn>-autyp = 'H'.
+       <sales_track_sn>-activity = 'Return'.
+     ELSEIF ( <sales_track_sn>-autyp = 'C' ) OR ( <sales_track_sn>-autyp = 'I' ) AND
+            ( <sales_track_sn>-vbtyp = 'N' ).
+       <sales_track_sn>-activity = 'Cancel'.
+     ENDIF.
+*    Serial Number
+     IF NOT <sales_track_sn>-sernr_equi IS INITIAL.
+       <sales_track_sn>-sernr = <sales_track_sn>-sernr_equi.
+     ELSEIF NOT <sales_track_sn>-sernr_objk IS INITIAL.
+       <sales_track_sn>-sernr = <sales_track_sn>-sernr_objk.
+     ENDIF.
+*    3rd Party
+     IF ( NOT <sales_track_sn>-tdname_en IS INITIAL ) AND ( <sales_track_sn>-party3rd IS INITIAL ).
+       update_party3rd: 'E' <sales_track_sn>-tdname_en.
+     ELSEIF ( NOT <sales_track_sn>-tdname_fr IS INITIAL ) AND ( <sales_track_sn>-party3rd IS INITIAL ).
+       update_party3rd: 'F' <sales_track_sn>-tdname_fr.
+     ENDIF.
+   ENDLOOP.
+*  Apply Serial Number restriction
+   DELETE rt_sales_track_sn WHERE NOT sernr IN it_sernr.
+*  Applying 3rd Party restriction
+   DELETE rt_sales_track_sn WHERE NOT party3rd IN it_party3rd.
+*  Mark Directship without serial number
+   mark_ds_w_o_sn( CHANGING ct_sales_track_sn = rt_sales_track_sn ).
+
+  ENDMETHOD.
+
+*---------------------------------------------------------------------*
+* mark_ds_w_o_sn
+*---------------------------------------------------------------------*
+  METHOD mark_ds_w_o_sn.
+  TYPES: BEGIN OF s_ds,
+            vbeln_vf TYPE vbeln_vf,
+            posnr_vf TYPE posnr_vf,
+            counter  TYPE i,
+            fkimg    TYPE fkimg,
+          END OF s_ds,
+          t_ds TYPE TABLE OF s_ds.
+  DATA: wa_sales_track_sn TYPE s_sales_track_sn.
+  DATA: wa_ds TYPE s_ds,
+        wt_ds TYPE t_ds.
+
+    wa_sales_track_sn-counter = 1.
+    MODIFY ct_sales_track_sn FROM wa_sales_track_sn TRANSPORTING counter
+      WHERE counter = 0 AND sernr <> SPACE.
+    LOOP AT ct_sales_track_sn INTO wa_sales_track_sn
+                              WHERE ( vbtyp = 'M' OR vbtyp = 'N' )
+                                AND ( vgtyp = 'C' ).
+      MOVE-CORRESPONDING wa_sales_track_sn TO wa_ds.
+      COLLECT wa_ds INTO wt_ds.
+    ENDLOOP.
+    LOOP AT wt_ds INTO wa_ds.
+      CATCH SYSTEM-EXCEPTIONS bcd_zerodivide = 1.
+        wa_ds-fkimg = wa_ds-fkimg / wa_ds-counter.
+      ENDCATCH.
+      IF wa_ds-counter = 0.
+        READ TABLE ct_sales_track_sn TRANSPORTING NO FIELDS
+          WITH TABLE KEY vbeln_vf = wa_ds-vbeln_vf posnr_vf = wa_ds-posnr_vf.
+        IF sy-subrc = 0.
+          wa_sales_track_sn-sernr = 'DIRECT SHIP'.
+          MODIFY ct_sales_track_sn INDEX sy-tabix FROM wa_sales_track_sn TRANSPORTING sernr.
+          wa_ds-counter = wa_ds-counter + 1.
+        ENDIF.
+      ENDIF.
+      IF wa_ds-counter < wa_ds-fkimg.
+        READ TABLE ct_sales_track_sn INTO wa_sales_track_sn
+          WITH TABLE KEY vbeln_vf = wa_ds-vbeln_vf posnr_vf = wa_ds-posnr_vf.
+        IF sy-subrc = 0.
+          wa_sales_track_sn-sernr = 'DIRECT SHIP'.
+          WHILE wa_ds-counter < wa_ds-fkimg.
+            INSERT wa_sales_track_sn INTO TABLE ct_sales_track_sn.
+            wa_ds-counter = wa_ds-counter + 1.
+          ENDWHILE.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+    SORT ct_sales_track_sn BY vbeln_vf posnr_vf.
+
+  ENDMETHOD.
+
+*---------------------------------------------------------------------*
+* display_report
+*---------------------------------------------------------------------*
+  METHOD display_report.
+  DATA: key TYPE salv_s_layout_key.
+  DATA: wa_sales_track_sn TYPE s_sales_track_sn.
+  DATA: wa_fieldcat TYPE lvc_s_fcat,
+        wt_fieldcat TYPE lvc_t_fcat.
+  DATA: alv    TYPE REF TO cl_salv_table,
+        func   TYPE REF TO cl_salv_functions,
+        layout TYPE REF TO cl_salv_layout,
+        cols   TYPE REF TO cl_salv_columns_table,
+        col    TYPE REF TO cl_salv_column_table,
+        evts   TYPE REF TO cl_salv_events_table.
+
+    cl_salv_table=>factory( IMPORTING r_salv_table = alv
+                            CHANGING  t_table      = _t_sales_track_sn ).
+*
+    func = alv->get_functions( ).
+    func->set_all( abap_true ).
+*
+    layout = alv->get_layout( ).
+    key-report = sy-repid.
+    layout->set_key( key ).
+    layout->set_save_restriction( cl_salv_layout=>restrict_none ).
+    layout->set_default( if_salv_c_bool_sap=>true ).
+*
+    CALL FUNCTION 'STRALAN_FIELDCAT_CREATE'
+      EXPORTING
+           is_structure = wa_sales_track_sn
+      IMPORTING
+           et_fieldcat  = wt_fieldcat.
+    LOOP AT wt_fieldcat INTO wa_fieldcat WHERE no_sum = SPACE.
+      AT FIRST.
+        cols = alv->get_columns( ).
+      ENDAT.
+      col ?= cols->get_column( wa_fieldcat-fieldname ).
+      CASE wa_fieldcat-fieldname.
+      WHEN 'VBTYP' OR 'AUTYP' OR 'AUART'  OR 'SERNR_EQUI' OR 'SERNR_OBJK' OR
+           'TDNAME_EN'  OR 'TDNAME_FR'.
+        col->set_technical( ).
+      WHEN OTHERS.
+        CONTINUE.
+      ENDCASE.
+    ENDLOOP.
+    col ?= cols->get_column( 'POSNR_VA' ).
+    col->set_medium_text( 'SDoc.Item' ).
+    col->set_long_text( 'SDoc.Item' ).
+    col->set_visible( abap_false ).
+    col ?= cols->get_column( 'POSNR_VF' ).
+    col->set_medium_text( 'Bill.Item' ).
+    col->set_long_text( 'Bill.Item' ).
+    col->set_visible( abap_false ).
+    col ?= cols->get_column( 'AUGRU' ).
+    col->set_medium_text( 'Ord.reason' ).
+    col->set_long_text( 'Order reason' ).
+    col ?= cols->get_column( 'ACTIVITY' ).
+    col->set_medium_text( 'Activity' ).
+    col->set_long_text( 'Activity' ).
+    col ?= cols->get_column( 'KUNAG' ).
+    col->set_short_text( 'Sold-to no' ).
+    col->set_medium_text( 'Sold-to no' ).
+    col->set_long_text( 'Sold-to no' ).
+    col ?= cols->get_column( 'KUNWE' ).
+    col->set_short_text( 'Ship-to no' ).
+    col->set_medium_text( 'Ship-to no' ).
+    col->set_long_text( 'Ship-to no' ).
+    col ?= cols->get_column( 'NAME1' ).
+    col->set_short_text( 'SoldToName' ).
+    col->set_medium_text( 'Sold-to Name' ).
+    col->set_long_text( 'Sold-to Name' ).
+    col ?= cols->get_column( 'NAME' ).
+    col->set_short_text( 'ShipToName' ).
+    col->set_medium_text( 'Ship-to Name' ).
+    col->set_long_text( 'Ship-to Name' ).
+    col ?= cols->get_column( 'TELF1' ).
+    col->set_short_text( 'SoldToPh' ).
+    col->set_medium_text( 'Sold-to phone' ).
+    col->set_long_text( 'Sold-to phone' ).
+    col ?= cols->get_column( 'TELFX' ).
+    col->set_short_text( 'SoldToFx' ).
+    col->set_medium_text( 'Sold-to fax' ).
+    col->set_long_text( 'Sold-to fax' ).
+    col ?= cols->get_column( 'TEL_NUMBER' ).
+    col->set_short_text( 'ShipToPh' ).
+    col->set_medium_text( 'Ship-to phone' ).
+    col->set_long_text( 'Ship-to phone' ).
+    col ?= cols->get_column( 'FAX_NUMBER' ).
+    col->set_short_text( 'ShipToFax' ).
+    col->set_medium_text( 'Ship-to fax' ).
+    col->set_long_text( 'Ship-to fax' ).
+    col ?= cols->get_column( 'STRAS' ).
+    col->set_medium_text( 'Sold-to Street' ).
+    col->set_long_text( 'Sold-to Street' ).
+    col ?= cols->get_column( 'ORT01' ).
+    col->set_short_text( 'SoldToCity' ).
+    col->set_medium_text( 'Sold-to City' ).
+    col->set_long_text( 'Sold-to City' ).
+    col ?= cols->get_column( 'REGIO' ).
+    col->set_short_text( 'SoldToPROV' ).
+    col->set_medium_text( 'Sold-to Province' ).
+    col->set_long_text( 'Sold-to Province' ).
+    col ?= cols->get_column( 'PSTLZ' ).
+    col->set_short_text( 'SoldToPC' ).
+    col->set_medium_text( 'Sold-to Postal Code' ).
+    col->set_long_text( 'Sold-to Postal Code' ).
+    col ?= cols->get_column( 'STREET' ).
+    col->set_medium_text( 'Ship-to Street' ).
+    col->set_long_text( 'Ship-to Street' ).
+    col ?= cols->get_column( 'CITY1' ).
+    col->set_short_text( 'ShipToCity' ).
+    col->set_medium_text( 'Ship-to City' ).
+    col->set_long_text( 'Ship-to City' ).
+    col ?= cols->get_column( 'REGION' ).
+    col->set_short_text( 'ShipToPROV' ).
+    col->set_medium_text( 'Ship-to Province' ).
+    col->set_long_text( 'Ship-to Province' ).
+    col ?= cols->get_column( 'POST_CODE1' ).
+    col->set_short_text( 'ShipToPC' ).
+    col->set_medium_text( 'Ship-to Postal Code' ).
+    col->set_long_text( 'Ship-to Postal Code' ).
+    col ?= cols->get_column( 'PARTY3RD' ).
+    col->set_short_text( '3rd Party' ).
+    col->set_medium_text( '3rd Party Name' ).
+    col->set_long_text( '3rd Party Name' ).
+    col ?= cols->get_column( 'FKIMG' ).
+    col->set_edit_mask( '==ZQUAN' ).
+*
+    evts = alv->get_event( ).
+    SET HANDLER: double_click_document FOR evts.
+*
+    alv->display( ).
+
+  ENDMETHOD.
+
+*---------------------------------------------------------------------*
+* double_click_document
+*---------------------------------------------------------------------*
+  METHOD double_click_document.
+  DATA: wa_sales_track_sn TYPE s_sales_track_sn.
+
+    READ TABLE _t_sales_track_sn INTO wa_sales_track_sn INDEX row.
+    IF ( sy-subrc = 0 ).
+      CASE column.
+      WHEN 'VBELN_VA' OR 'POSNR_VA'.
+        SET PARAMETER ID 'AUN' FIELD wa_sales_track_sn-vbeln_va.
+        SET PARAMETER ID 'VPO' FIELD wa_sales_track_sn-posnr_va.
+        CALL TRANSACTION 'VA03' AND SKIP FIRST SCREEN.
+      WHEN 'VBELN_VF' OR 'POSNR_VF'.
+        SET PARAMETER ID 'VF' FIELD wa_sales_track_sn-vbeln_vf.
+        SET PARAMETER ID 'VFP' FIELD wa_sales_track_sn-posnr_vf.
+        CALL TRANSACTION 'VF03' AND SKIP FIRST SCREEN.
+      WHEN OTHERS.
+        MESSAGE 'Position cursor on Billing or Sales Document column' TYPE 'I'.
+      ENDCASE.
+    ENDIF.
+
+  ENDMETHOD.
+
+ENDCLASS.
